@@ -1,10 +1,6 @@
 <html>
 <head>
-    <script>
-        function testfunc() {
-            console.log("Test");
-        }
-        
+    <script>       
         function compareCsvFiles() {
             const file1 = document.getElementById('file1').files[0];
             const file2 = document.getElementById('file2').files[0];
@@ -86,7 +82,7 @@
     <h2>Upload Files for Comparison</h2>
     <input type="file" id="file1" accept=".csv"> Devices File (Hostname)<br><br>
     <input type="file" id="file2" accept=".csv"> Workstations File (Device ID)<br><br>
-    <button onclick="console.log('Button Clicked.'); alert('Button Clicked!')">Compare & Download</button>
+    <button onclick=compareCsvFiles()>Compare & Download</button>
     <p id="outputMsg"></p>
 </body>
 </html>
