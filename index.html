@@ -1,92 +1,100 @@
-<html>
+<!DOCTYPE html>
+<html lang="en">
 <head>
-    <script>       
-        function compareCsvFiles() {
-            const file1 = document.getElementById('file1').files[0];
-            const file2 = document.getElementById('file2').files[0];
-        
-            if (!file1 || !file2) {
-                document.getElementById('outputMsg').innerText = "Please upload both CSV files.";
-                return;
-            }
-        
-            const reader1 = new FileReader();
-            const reader2 = new FileReader();
-        
-            reader1.onload = function(event) {
-                const devicesSet = parseCsv(event.target.result);
-                reader2.onload = function(event) {
-                    const workstationsSet = parseCsv(event.target.result);
-                    generateCsvOutput(devicesSet, workstationsSet);
-                };
-                reader2.readAsText(file2);
-            };
-            reader1.readAsText(file1);
-        }
-        
-        function parseCsv(data) {
-            const lines = data.split(/\r?\n/); // Handle Windows/Mac/Linux line breaks
-            const header = lines[0].split(',').map(h => h.trim().toUpperCase()); // Normalize case & spaces
-            const firstCol = header[0]; // Assume first column contains the needed data
-            const values = new Set();
-        
-            for (let i = 1; i < lines.length; i++) {
-                const cols = lines[i].split(',').map(c => c.trim());
-                if (cols.length > 0 && cols[0]) {
-                    values.add(cols[0].toUpperCase()); // Normalize case
-                }
-            }
-            return values;
-        }
-        
-        function generateCsvOutput(devicesSet, workstationsSet) {
-            const inDevicesNotWorkstations = [...devicesSet].filter(item => !workstationsSet.has(item));
-            const inWorkstationsNotDevices = [...workstationsSet].filter(item => !devicesSet.has(item));
-        
-            // Sort with numbers below letters
-            const sortCustom = arr => arr.sort((a, b) => {
-                const isNumA = /^\d/.test(a);
-                const isNumB = /^\d/.test(b);
-                return isNumA === isNumB ? a.localeCompare(b) : isNumA ? 1 : -1;
-            });
-        
-            sortCustom(inDevicesNotWorkstations);
-            sortCustom(inWorkstationsNotDevices);
-        
-            let csvContent = "In Devices Not Workstations,In Workstations Not Devices\n";
-            const maxLength = Math.max(inDevicesNotWorkstations.length, inWorkstationsNotDevices.length);
-            
-            for (let i = 0; i < maxLength; i++) {
-                const col1 = inDevicesNotWorkstations[i] || '';
-                const col2 = inWorkstationsNotDevices[i] || '';
-                csvContent += `${col1},${col2}\n`;
-            }
-        
-            downloadCsv(csvContent);
-        }
-        
-        function downloadCsv(content) {
-            const blob = new Blob([content], { type: 'text/csv' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'Differences.csv';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            document.getElementById('outputMsg').innerText = "Comparison complete. File downloaded.";
-        }
-    </script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CSV Comparison Tool</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
 </head>
 <body>
-    <h2>Upload Files for Comparison</h2>
-    <input type="file" id="file1" accept=".csv"> Devices File (Hostname)<br><br>
-    <input type="file" id="file2" accept=".csv"> Workstations File (Device ID)<br><br>
-    <button onclick=compareCsvFiles()>Compare & Download</button>
-    <p id="outputMsg"></p>
+    <h2>CSV Comparison Tool</h2>
+    <input type="file" id="devicesFile" accept=".csv"> Devices.csv<br><br>
+    <input type="file" id="workstationsFile" accept=".csv"> Workstations.csv<br><br>
+    <button onclick="compareCSV()">Compare</button>
+    <p id="status"></p>
+
+    <script>
+        function readColumn(file, columnName, callback) {
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const csvData = event.target.result;
+                Papa.parse(csvData, {
+                    header: true,
+                    skipEmptyLines: true,
+                    complete: function(results) {
+                        const headers = results.meta.fields.map(h => h.trim()); // Normalize headers
+                        console.log(`Headers in ${file.name}:`, headers);
+
+                        columnName = columnName.trim(); // Ensure stripped column match
+                        if (!headers.includes(columnName)) {
+                            alert(`Column '${columnName}' not found in ${file.name}. Available: ${headers.join(', ')}`);
+                            return;
+                        }
+
+                        const dataSet = new Set(
+                            results.data
+                                .map(row => row[columnName]?.trim().toUpperCase()) // Trim & uppercase
+                                .filter(Boolean) // Remove empty values
+                        );
+                        callback(dataSet);
+                    }
+                });
+            };
+            reader.readAsText(file);
+        }
+
+        function customSort(arr) {
+            return arr.sort((a, b) => {
+                const aIsDigit = /^\d/.test(a);
+                const bIsDigit = /^\d/.test(b);
+                if (aIsDigit !== bIsDigit) return aIsDigit ? 1 : -1;
+                return a.localeCompare(b);
+            });
+        }
+
+        function compareCSV() {
+            const devicesFile = document.getElementById("devicesFile").files[0];
+            const workstationsFile = document.getElementById("workstationsFile").files[0];
+
+            if (!devicesFile || !workstationsFile) {
+                alert("Please select both CSV files.");
+                return;
+            }
+
+            document.getElementById("status").innerText = "Processing...";
+
+            readColumn(devicesFile, "Hostname", function(devicesSet) {
+                readColumn(workstationsFile, "Device ID", function(workstationsSet) {
+                    
+                    const inDevicesNotWorkstations = customSort([...devicesSet].filter(x => !workstationsSet.has(x)));
+                    const inWorkstationsNotDevices = customSort([...workstationsSet].filter(x => !devicesSet.has(x)));
+
+                    generateCSV(inDevicesNotWorkstations, inWorkstationsNotDevices);
+                });
+            });
+        }
+
+        function generateCSV(devicesList, workstationsList) {
+            const maxLength = Math.max(devicesList.length, workstationsList.length);
+            while (devicesList.length < maxLength) devicesList.push("");
+            while (workstationsList.length < maxLength) workstationsList.push("");
+
+            let csvContent = "data:text/csv;charset=utf-8,";
+            csvContent += "In Datto Not Airtable,In Airtable Not Datto\n";
+            devicesList.forEach((d, i) => {
+                csvContent += `${d},${workstationsList[i]}\n`;
+            });
+
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", "Differences.csv");
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            document.getElementById("status").innerText = "Comparison complete. File downloaded.";
+        }
+    </script>
 </body>
 </html>
-
-
-
-    
