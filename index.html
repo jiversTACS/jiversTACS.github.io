@@ -35,14 +35,17 @@
     }
 
     .drop-zone {
-      width: 100%;
-      padding: 30px;
-      border: 2px dashed #ccc;
-      border-radius: 8px;
-      text-align: center;
-      background-color: white;
-      cursor: pointer;
+    padding: 20px; /* reduced from 30px */
+    border: 2px dashed #ccc;
+    border-radius: 8px;
+    text-align: center;
+    background-color: white;
+    cursor: pointer;
+    width: 300px; /* set fixed width for consistency */
+    box-sizing: border-box;
+    margin-bottom: 10px;
     }
+
 
     .drop-zone.dragover {
       background-color: #e0f7fa;
