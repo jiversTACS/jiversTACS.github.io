@@ -50,16 +50,21 @@
     }
 
     .file-preview {
-      width: 100%;
-      background: #fff;
-      padding: 10px;
-      border: 1px solid #ccc;
-      margin-top: 10px;
-      border-radius: 5px;
-      font-size: 0.9em;
-      max-height: 150px;
-      overflow-y: auto;
+    background: #fff;
+    padding: 10px;
+    border: 1px solid #ccc;
+    margin-top: 10px;
+    border-radius: 5px;
+    font-size: 0.9em;
+    max-height: 150px;
+    overflow-y: auto;
+    overflow-x: auto; /* Add this line */
+    width: 100%; /* Ensure consistent width */
+    max-width: 350px; /* Lock max horizontal size */
+    box-sizing: border-box; /* Prevent padding from expanding box */
+    white-space: nowrap; /* Prevent table rows from wrapping */
     }
+
 
     button {
       margin: 0 auto;
