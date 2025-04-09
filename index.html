@@ -8,118 +8,149 @@
   <style>
     body {
       font-family: Arial, sans-serif;
-      margin: 40px;
-      background-color: #f9f9f9;
-      color: #333;
+      max-width: 900px;
+      margin: 40px auto;
+      padding: 20px;
+      background-color: #f4f4f4;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
     }
+
     h2 {
       text-align: center;
-      color: #2c3e50;
     }
+
+    .upload-container {
+      display: flex;
+      justify-content: space-between;
+      gap: 20px;
+      margin-bottom: 30px;
+    }
+
     .upload-section {
-      margin-bottom: 40px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
     }
-    .dropzone {
+
+    .drop-zone {
+      width: 100%;
+      padding: 30px;
       border: 2px dashed #ccc;
-      padding: 20px;
+      border-radius: 8px;
       text-align: center;
+      background-color: white;
       cursor: pointer;
-      color: #555;
-      background-color: #fff;
-      border-radius: 6px;
-      transition: background-color 0.2s, border-color 0.2s;
     }
-    .dropzone:hover {
-      background-color: #f0f0f0;
-      border-color: #999;
+
+    .drop-zone.dragover {
+      background-color: #e0f7fa;
+      border-color: #00acc1;
     }
-    input[type="file"] {
-      display: none;
-    }
-    .preview {
+
+    .file-preview {
+      width: 100%;
+      background: #fff;
+      padding: 10px;
+      border: 1px solid #ccc;
       margin-top: 10px;
-      font-style: italic;
-      color: #2c3e50;
+      border-radius: 5px;
+      font-size: 0.9em;
+      max-height: 150px;
+      overflow-y: auto;
     }
+
     button {
-      background-color: #3498db;
+      margin: 0 auto;
+      display: block;
+      width: 200px;
+      padding: 10px;
+      background-color: #007BFF;
       color: white;
-      padding: 12px 20px;
+      font-size: 16px;
       border: none;
       border-radius: 6px;
-      font-size: 16px;
       cursor: pointer;
-      display: block;
-      margin: 0 auto 20px auto;
     }
+
     button:hover {
-      background-color: #2980b9;
+      background-color: #0056b3;
     }
+
     #status {
+      margin-top: 20px;
       text-align: center;
-      font-weight: bold;
     }
   </style>
 </head>
 <body>
   <h2>Inventory Comparison Tool</h2>
 
-  <div class="upload-section">
-    <label for="devicesFile">
-      <div class="dropzone" id="dropzone-devices">Click or drag & drop Datto File (Devices.csv)</div>
-    </label>
-    <input type="file" id="devicesFile" accept=".csv">
-    <div id="preview-devices" class="preview"></div>
-  </div>
+  <div class="upload-container">
+    <div class="upload-section">
+      <div class="drop-zone" id="devicesDrop">Drop or click to upload Datto File (Devices.csv)</div>
+      <input type="file" id="devicesFile" accept=".csv" style="display:none">
+      <div class="file-preview" id="devicesPreview"></div>
+    </div>
 
-  <div class="upload-section">
-    <label for="workstationsFile">
-      <div class="dropzone" id="dropzone-workstations">Click or drag & drop Airtable File (Workstations.csv)</div>
-    </label>
-    <input type="file" id="workstationsFile" accept=".csv">
-    <div id="preview-workstations" class="preview"></div>
+    <div class="upload-section">
+      <div class="drop-zone" id="workstationsDrop">Drop or click to upload Airtable File (Workstations.csv)</div>
+      <input type="file" id="workstationsFile" accept=".csv" style="display:none">
+      <div class="file-preview" id="workstationsPreview"></div>
+    </div>
   </div>
 
   <button onclick="compareCSV()">Compare & Download</button>
   <p id="status"></p>
 
   <script>
-    function setupDropzone(dropzoneId, fileInputId, previewId) {
-      const dropzone = document.getElementById(dropzoneId);
-      const fileInput = document.getElementById(fileInputId);
+    function setupDropZone(dropZoneId, inputId, previewId) {
+      const dropZone = document.getElementById(dropZoneId);
+      const input = document.getElementById(inputId);
       const preview = document.getElementById(previewId);
 
-      dropzone.addEventListener("click", () => fileInput.click());
-
-      dropzone.addEventListener("dragover", (e) => {
+      dropZone.addEventListener('click', () => input.click());
+      dropZone.addEventListener('dragover', (e) => {
         e.preventDefault();
-        dropzone.style.backgroundColor = "#e0e0e0";
+        dropZone.classList.add('dragover');
       });
-
-      dropzone.addEventListener("dragleave", () => {
-        dropzone.style.backgroundColor = "#fff";
-      });
-
-      dropzone.addEventListener("drop", (e) => {
+      dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+      dropZone.addEventListener('drop', (e) => {
         e.preventDefault();
-        dropzone.style.backgroundColor = "#fff";
+        dropZone.classList.remove('dragover');
         const file = e.dataTransfer.files[0];
-        if (file) {
-          fileInput.files = e.dataTransfer.files;
-          preview.textContent = `Uploaded: ${file.name}`;
-        }
+        input.files = e.dataTransfer.files;
+        previewCSV(file, preview);
       });
+      input.addEventListener('change', () => {
+        if (input.files[0]) previewCSV(input.files[0], preview);
+      });
+    }
 
-      fileInput.addEventListener("change", () => {
-        const file = fileInput.files[0];
-        if (file) {
-          preview.textContent = `Uploaded: ${file.name}`;
+    function previewCSV(file, previewContainer) {
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        preview: 5,
+        complete: function(results) {
+          const headers = results.meta.fields;
+          let html = `<strong>${file.name}</strong><br><table><tr>`;
+          headers.forEach(h => html += `<th>${h}</th>`);
+          html += '</tr>';
+          results.data.forEach(row => {
+            html += '<tr>';
+            headers.forEach(h => html += `<td>${row[h]}</td>`);
+            html += '</tr>';
+          });
+          html += '</table>';
+          previewContainer.innerHTML = html;
         }
       });
     }
 
-    setupDropzone("dropzone-devices", "devicesFile", "preview-devices");
-    setupDropzone("dropzone-workstations", "workstationsFile", "preview-workstations");
+    setupDropZone('devicesDrop', 'devicesFile', 'devicesPreview');
+    setupDropZone('workstationsDrop', 'workstationsFile', 'workstationsPreview');
 
     function readColumn(file, columnName, callback) {
       const reader = new FileReader();
@@ -136,9 +167,7 @@
               return;
             }
             const dataSet = new Set(
-              results.data
-                .map(row => row[columnName]?.trim().toUpperCase())
-                .filter(Boolean)
+              results.data.map(row => row[columnName]?.trim().toUpperCase()).filter(Boolean)
             );
             callback(dataSet);
           }
@@ -151,8 +180,7 @@
       return arr.sort((a, b) => {
         const aIsDigit = /^\d/.test(a);
         const bIsDigit = /^\d/.test(b);
-        if (aIsDigit !== bIsDigit) return aIsDigit ? 1 : -1;
-        return a.localeCompare(b);
+        return aIsDigit !== bIsDigit ? (aIsDigit ? 1 : -1) : a.localeCompare(b);
       });
     }
 
@@ -181,8 +209,7 @@
       while (devicesList.length < maxLength) devicesList.push("");
       while (workstationsList.length < maxLength) workstationsList.push("");
 
-      let csvContent = "data:text/csv;charset=utf-8,";
-      csvContent += "In Datto Not Airtable,In Airtable Not Datto\n";
+      let csvContent = "data:text/csv;charset=utf-8,In Datto Not Airtable,In Airtable Not Datto\n";
       devicesList.forEach((d, i) => {
         csvContent += `${d},${workstationsList[i]}\n`;
       });
