@@ -211,46 +211,83 @@
       });
     }
 
-    function compareCSV() {
-      const devicesFile = document.getElementById("devicesFile").files[0];
-      const workstationsFile = document.getElementById("workstationsFile").files[0];
-
-      if (!devicesFile || !workstationsFile) {
-        alert("Please select both CSV files.");
-        return;
-      }
-
-      document.getElementById("status").innerText = "Processing...";
-
-      readColumn(devicesFile, "Hostname", function(devicesSet) {
-        readColumn(workstationsFile, "Device ID", function(workstationsSet) {
-          const inDevicesNotWorkstations = customSort([...devicesSet].filter(x => !workstationsSet.has(x)));
-          const inWorkstationsNotDevices = customSort([...workstationsSet].filter(x => !devicesSet.has(x)));
-          generateCSV(inDevicesNotWorkstations, inWorkstationsNotDevices);
+    function buildDeviceDetailsMap(file, callback) {
+  const reader = new FileReader();
+  reader.onload = function(event) {
+    const csvData = event.target.result;
+    Papa.parse(csvData, {
+      header: true,
+      skipEmptyLines: true,
+      complete: function(results) {
+        const map = new Map();
+        results.data.forEach(row => {
+          const hostname = row["Hostname"]?.trim().toUpperCase();
+          const lastSeen = row["Last Seen"]?.trim() || "";
+          const lastReboot = row["Last Reboot"]?.trim() || "";
+          if (hostname) {
+            map.set(hostname, { lastSeen, lastReboot });
+          }
         });
+        callback(map);
+      }
+    });
+  };
+  reader.readAsText(file);
+}
+
+    
+    function compareCSV() {
+  const devicesFile = document.getElementById("devicesFile").files[0];
+  const workstationsFile = document.getElementById("workstationsFile").files[0];
+
+  if (!devicesFile || !workstationsFile) {
+    alert("Please select both CSV files.");
+    return;
+  }
+
+  document.getElementById("status").innerText = "Processing...";
+
+  readColumn(devicesFile, "Hostname", function(devicesSet) {
+    readColumn(workstationsFile, "Device ID", function(workstationsSet) {
+      const inDevicesNotWorkstations = customSort([...devicesSet].filter(x => !workstationsSet.has(x)));
+      const inWorkstationsNotDevices = customSort([...workstationsSet].filter(x => !devicesSet.has(x)));
+
+      buildDeviceDetailsMap(devicesFile, function(deviceDetailsMap) {
+        const enrichedDevices = inDevicesNotWorkstations.map(hostname => {
+          const details = deviceDetailsMap.get(hostname) || { lastSeen: "", lastReboot: "" };
+          return [hostname, details.lastSeen, details.lastReboot];
+        });
+
+        generateCSV(enrichedDevices, inWorkstationsNotDevices);
       });
-    }
+    });
+  });
+}
+
 
     function generateCSV(devicesList, workstationsList) {
-      const maxLength = Math.max(devicesList.length, workstationsList.length);
-      while (devicesList.length < maxLength) devicesList.push("");
-      while (workstationsList.length < maxLength) workstationsList.push("");
+  const maxLength = Math.max(devicesList.length, workstationsList.length);
+  while (devicesList.length < maxLength) devicesList.push(["", "", ""]);
+  while (workstationsList.length < maxLength) workstationsList.push("");
 
-      let csvContent = "data:text/csv;charset=utf-8,In Datto Not Airtable,In Airtable Not Datto\n";
-      devicesList.forEach((d, i) => {
-        csvContent += `${d},${workstationsList[i]}\n`;
-      });
+  let csvContent = "data:text/csv;charset=utf-8,In Datto Not Airtable - Hostname,Last Seen,Last Reboot,In Airtable Not Datto\n";
+  for (let i = 0; i < maxLength; i++) {
+    const [hostname, lastSeen, lastReboot] = devicesList[i];
+    const airtable = workstationsList[i];
+    csvContent += `${hostname},${lastSeen},${lastReboot},${airtable}\n`;
+  }
 
-      const encodedUri = encodeURI(csvContent);
-      const link = document.createElement("a");
-      link.setAttribute("href", encodedUri);
-      link.setAttribute("download", "Differences.csv");
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+  const encodedUri = encodeURI(csvContent);
+  const link = document.createElement("a");
+  link.setAttribute("href", encodedUri);
+  link.setAttribute("download", "Differences.csv");
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
 
-      document.getElementById("status").innerText = "Comparison complete. File downloaded.";
-    }
+  document.getElementById("status").innerText = "Comparison complete. File downloaded.";
+}
+
   </script>
 </body>
 </html>
