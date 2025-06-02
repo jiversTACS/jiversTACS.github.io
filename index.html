@@ -187,18 +187,18 @@ setupDropZone("pivotDrop", "pivotFile", "pivotPreview", "pivotPreviewWrapper");
         skipEmptyLines: true,
         complete: function(pivotResults) {
           const refMap = new Map(); // DebtorNumber -> Set of Reference2s
-          const unmatchGrouped = new Map(); // DebtorNumber -> [rows]
-          const pivotGrouped = new Map();   // DebtorNumber -> [rows]
+          const unmatchGrouped = new Map(); // DebtorNumber -> [unmatchRows]
+          const pivotGrouped = new Map();   // DebtorNumber -> [pivotRows]
 
           const unmatch = unmatchResults.data;
           const pivot = pivotResults.data.filter(
-            row => row[Object.keys(row)[10]]?.includes("-RE") // BinName contains -RE
+            row => row[Object.keys(row)[10]]?.includes("-RE")
           );
 
-          // Build unmatchName reference sets and groupings
+          // Build from unmatch
           unmatch.forEach(row => {
-            const a = row[Object.keys(row)[0]]?.trim(); // column A
-            const c = row[Object.keys(row)[2]]?.trim(); // column C
+            const a = row[Object.keys(row)[0]]?.trim(); // A
+            const c = row[Object.keys(row)[2]]?.trim(); // C
             if (!a || !c) return;
 
             if (!refMap.has(a)) refMap.set(a, new Set());
@@ -206,19 +206,25 @@ setupDropZone("pivotDrop", "pivotFile", "pivotPreview", "pivotPreviewWrapper");
 
             if (!unmatchGrouped.has(a)) unmatchGrouped.set(a, []);
             unmatchGrouped.get(a).push({
-              A: a,
-              C: c,
+              Source: "Unmatch",
+              DebtorNumber: a,
+              UnmatchRef: c,
               E: row[Object.keys(row)[4]],
               F: row[Object.keys(row)[5]],
               G: row[Object.keys(row)[6]],
-              H: row[Object.keys(row)[7]]
+              H: row[Object.keys(row)[7]],
+              PivotRef: "",
+              B: "",
+              C: "",
+              D: "",
+              K: ""
             });
           });
 
-          // Build pivot reference sets and groupings
+          // Build from pivot
           pivot.forEach(row => {
-            const a = row[Object.keys(row)[0]]?.trim(); // column A
-            const i = row[Object.keys(row)[8]]?.trim(); // column I
+            const a = row[Object.keys(row)[0]]?.trim(); // A
+            const i = row[Object.keys(row)[8]]?.trim(); // I
             if (!a || !i) return;
 
             if (!refMap.has(a)) refMap.set(a, new Set());
@@ -226,8 +232,14 @@ setupDropZone("pivotDrop", "pivotFile", "pivotPreview", "pivotPreviewWrapper");
 
             if (!pivotGrouped.has(a)) pivotGrouped.set(a, []);
             pivotGrouped.get(a).push({
-              A: a,
-              I: i,
+              Source: "Pivot",
+              DebtorNumber: a,
+              UnmatchRef: "",
+              E: "",
+              F: "",
+              G: "",
+              H: "",
+              PivotRef: i,
               B: row[Object.keys(row)[1]],
               C: row[Object.keys(row)[2]],
               D: row[Object.keys(row)[3]],
@@ -235,24 +247,23 @@ setupDropZone("pivotDrop", "pivotFile", "pivotPreview", "pivotPreviewWrapper");
             });
           });
 
-          // Split into single and multi match sets
-          const singleData = [];
-          const multiData = [];
+          // Final output containers
+          const singleMatch = [];
+          const multiMatch = [];
 
           refMap.forEach((refSet, debtor) => {
-            const target = refSet.size > 1 ? multiData : singleData;
+            const target = refSet.size > 1 ? multiMatch : singleMatch;
             const unmatchRows = unmatchGrouped.get(debtor) || [];
             const pivotRows = pivotGrouped.get(debtor) || [];
-
-            unmatchRows.forEach(row => target.push({ Source: "Unmatch", ...row }));
-            pivotRows.forEach(row => target.push({ Source: "Pivot", ...row }));
+            target.push(...unmatchRows);
+            target.push(...pivotRows);
           });
 
-          exportCSV(singleData, "single_match.csv");
-          exportCSV(multiData, "multi_match.csv");
+          exportCSV(singleMatch, "single_match.csv");
+          exportCSV(multiMatch, "multi_match.csv");
 
           document.getElementById("status").innerText =
-            `Done! Exported ${singleData.length} single-match and ${multiData.length} multi-match rows.`;
+            `Done! Exported ${singleMatch.length} single-match and ${multiMatch.length} multi-match rows.`;
         }
       });
     }
@@ -260,9 +271,13 @@ setupDropZone("pivotDrop", "pivotFile", "pivotPreview", "pivotPreviewWrapper");
 }
 
 
+
     function exportCSV(data, filename) {
   if (!data.length) return;
-  const headers = Object.keys(data[0]);
+  const headers = [
+    "Source", "DebtorNumber", "UnmatchRef", "E", "F", "G", "H",
+    "PivotRef", "B", "C", "D", "K"
+  ];
   const rows = [headers.join(",")];
   data.forEach(row => {
     const line = headers.map(h => JSON.stringify(row[h] ?? ""));
@@ -277,6 +292,7 @@ setupDropZone("pivotDrop", "pivotFile", "pivotPreview", "pivotPreviewWrapper");
   link.click();
   document.body.removeChild(link);
 }
+
 
   </script>
 </body>
