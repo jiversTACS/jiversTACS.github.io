@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Inventory Comparison Tool</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>UnmatchName Matcher</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
   <style>
     body {
@@ -15,84 +15,46 @@
       border-radius: 10px;
       box-shadow: 0 0 10px rgba(0,0,0,0.1);
     }
-
-    h2 {
-      text-align: center;
-    }
-
+    h2 { text-align: center; }
     .upload-container {
       display: flex;
-      justify-content: space-between;
       gap: 20px;
+      justify-content: center;
+      flex-wrap: wrap;
       margin-bottom: 30px;
     }
-
-    .upload-wrapper {
-    display: flex;
-    gap: 20px; /* space between upload boxes */
-    justify-content: center;
-    flex-wrap: wrap; /* allow wrapping on smaller screens */
-    }
-
     .upload-section {
-      flex: 1;
       display: flex;
       flex-direction: column;
       align-items: center;
     }
-
     .drop-zone {
-    padding: 20px; /* reduced from 30px */
-    border: 2px dashed #ccc;
-    border-radius: 8px;
-    text-align: center;
-    background-color: white;
-    cursor: pointer;
-    width: 300px; /* set fixed width for consistency */
-    box-sizing: border-box;
-    margin-bottom: 10px;
+      padding: 20px;
+      border: 2px dashed #ccc;
+      border-radius: 8px;
+      background-color: white;
+      text-align: center;
+      width: 300px;
+      cursor: pointer;
     }
-
-
     .drop-zone.dragover {
       background-color: #e0f7fa;
       border-color: #00acc1;
     }
-
-    .file-preview {
-    background: #fff;
-    padding: 10px;
-    border: 1px solid #ccc;
-    margin-top: 10px;
-    border-radius: 5px;
-    font-size: 0.9em;
-    max-height: 150px;
-    overflow-y: auto;
-    overflow-x: auto; /* Add this line */
-    width: 100%; /* Ensure consistent width */
-    max-width: 350px; /* Lock max horizontal size */
-    box-sizing: border-box; /* Prevent padding from expanding box */
-    white-space: nowrap; /* Prevent table rows from wrapping */
-    }
-
-
+    input[type="file"] { display: none; }
     button {
-      margin: 0 auto;
       display: block;
       width: 200px;
+      margin: 0 auto;
       padding: 10px;
+      font-size: 16px;
       background-color: #007BFF;
       color: white;
-      font-size: 16px;
       border: none;
       border-radius: 6px;
       cursor: pointer;
     }
-
-    button:hover {
-      background-color: #0056b3;
-    }
-
+    button:hover { background-color: #0056b3; }
     #status {
       margin-top: 20px;
       text-align: center;
@@ -100,194 +62,120 @@
   </style>
 </head>
 <body>
-  <h2>Inventory Comparison Tool</h2>
-
+  <h2>UnmatchName Matcher</h2>
   <div class="upload-container">
-  <div class="upload-section">
-    <div class="drop-zone" id="devicesDrop">Drop or click to upload Datto File (Devices.csv)</div>
-    <input type="file" id="devicesFile" accept=".csv" style="display:none">
-
-    <div class="preview-wrapper" id="devicesPreviewWrapper" style="display: none;">
-      <label><strong>Preview</strong></label>
-      <div class="file-preview" id="devicesPreview"></div>
+    <div class="upload-section">
+      <div class="drop-zone" id="unmatchDrop">Upload UnmatchName File</div>
+      <input type="file" id="unmatchFile" accept=".csv">
+    </div>
+    <div class="upload-section">
+      <div class="drop-zone" id="pivotDrop">Upload Pivot File</div>
+      <input type="file" id="pivotFile" accept=".csv">
     </div>
   </div>
 
-  <div class="upload-section">
-    <div class="drop-zone" id="workstationsDrop">Drop or click to upload Airtable File (Workstations.csv)</div>
-    <input type="file" id="workstationsFile" accept=".csv" style="display:none">
-
-    <div class="preview-wrapper" id="workstationsPreviewWrapper" style="display: none;">
-      <label><strong>Preview</strong></label>
-      <div class="file-preview" id="workstationsPreview"></div>
-    </div>
-  </div>
-</div>
-
-
-  <button onclick="compareCSV()">Compare & Download</button>
+  <button onclick="processFiles()">Generate Output</button>
   <p id="status"></p>
 
   <script>
-    function setupDropZone(dropZoneId, inputId, previewId) {
-      const dropZone = document.getElementById(dropZoneId);
-      const input = document.getElementById(inputId);
-      const preview = document.getElementById(previewId);
-
-      dropZone.addEventListener('click', () => input.click());
-      dropZone.addEventListener('dragover', (e) => {
+    function setupDropZone(dropId, inputId) {
+      const dropZone = document.getElementById(dropId);
+      const fileInput = document.getElementById(inputId);
+      dropZone.addEventListener('click', () => fileInput.click());
+      dropZone.addEventListener('dragover', e => {
         e.preventDefault();
         dropZone.classList.add('dragover');
       });
       dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
-      dropZone.addEventListener('drop', (e) => {
+      dropZone.addEventListener('drop', e => {
         e.preventDefault();
         dropZone.classList.remove('dragover');
         const file = e.dataTransfer.files[0];
-        input.files = e.dataTransfer.files;
-        previewCSV(file, preview);
-      });
-      input.addEventListener('change', () => {
-        if (input.files[0]) previewCSV(input.files[0], preview);
+        fileInput.files = e.dataTransfer.files;
       });
     }
 
-    function previewCSV(file, previewContainer) {
-      Papa.parse(file, {
+    setupDropZone("unmatchDrop", "unmatchFile");
+    setupDropZone("pivotDrop", "pivotFile");
+
+    function processFiles() {
+      const unmatchFile = document.getElementById("unmatchFile").files[0];
+      const pivotFile = document.getElementById("pivotFile").files[0];
+      if (!unmatchFile || !pivotFile) {
+        alert("Please upload both files.");
+        return;
+      }
+
+      document.getElementById("status").innerText = "Processing...";
+
+      Papa.parse(unmatchFile, {
         header: true,
         skipEmptyLines: true,
-        preview: 5,
-        complete: function(results) {
-          const headers = results.meta.fields;
-          let html = `<strong>${file.name}</strong><br><table><tr>`;
-          headers.forEach(h => html += `<th>${h}</th>`);
-          html += '</tr>';
-          results.data.forEach(row => {
-            html += '<tr>';
-            headers.forEach(h => html += `<td>${row[h]}</td>`);
-            html += '</tr>';
-          });
-          html += '</table>';
-          previewContainer.innerHTML = html;
+        complete: function(unmatchResults) {
+          const unmatchRows = unmatchResults.data.map(row => ({
+            keyA: row[Object.keys(row)[0]]?.trim(),
+            keyC: row[Object.keys(row)[2]]?.trim(),
+            extra: [row[Object.keys(row)[4]], row[Object.keys(row)[5]], row[Object.keys(row)[6]], row[Object.keys(row)[7]]],
+            full: row
+          }));
 
-          const wrapper = previewContainer.closest('.preview-wrapper');
-          if (wrapper) wrapper.style.display = 'block';
+          Papa.parse(pivotFile, {
+            header: true,
+            skipEmptyLines: true,
+            complete: function(pivotResults) {
+              const pivotMap = new Map();
+              pivotResults.data.forEach(row => {
+                if (row[Object.keys(row)[10]]?.includes("-RE")) {
+                  const keyA = row[Object.keys(row)[0]]?.trim();
+                  const keyI = row[Object.keys(row)[8]]?.trim();
+                  const extras = [row[Object.keys(row)[1]], row[Object.keys(row)[2]], row[Object.keys(row)[3]], row[Object.keys(row)[10]]];
+                  if (!pivotMap.has(keyA)) pivotMap.set(keyA, []);
+                  pivotMap.get(keyA).push({ keyI, extras });
+                }
+              });
+
+              const singleMatch = [];
+              const multiMatch = [];
+              const groupByKeyA = {};
+
+              unmatchRows.forEach(row => {
+                if (!groupByKeyA[row.keyA]) groupByKeyA[row.keyA] = new Set();
+                groupByKeyA[row.keyA].add(row.keyC);
+              });
+
+              Object.entries(groupByKeyA).forEach(([keyA, set]) => {
+                const matchedRows = unmatchRows.filter(r => r.keyA === keyA);
+                if (set.size > 1) multiMatch.push(...matchedRows);
+                else singleMatch.push(...matchedRows);
+              });
+
+              exportCSV(singleMatch, "single_match.csv");
+              exportCSV(multiMatch, "multi_match.csv");
+
+              document.getElementById("status").innerText = `Done! Downloaded ${singleMatch.length} single-match rows and ${multiMatch.length} multi-match rows.`;
+            }
+          });
         }
       });
     }
 
-    setupDropZone('devicesDrop', 'devicesFile', 'devicesPreview');
-    setupDropZone('workstationsDrop', 'workstationsFile', 'workstationsPreview');
-
-    function readColumn(file, columnName, callback) {
-      const reader = new FileReader();
-      reader.onload = function(event) {
-        const csvData = event.target.result;
-        Papa.parse(csvData, {
-          header: true,
-          skipEmptyLines: true,
-          complete: function(results) {
-            const headers = results.meta.fields.map(h => h.trim());
-            columnName = columnName.trim();
-            if (!headers.includes(columnName)) {
-              alert(`Column '${columnName}' not found in ${file.name}. Available: ${headers.join(', ')}`);
-              return;
-            }
-            const dataSet = new Set(
-              results.data.map(row => row[columnName]?.trim().toUpperCase()).filter(Boolean)
-            );
-            callback(dataSet);
-          }
-        });
-      };
-      reader.readAsText(file);
-    }
-
-    function customSort(arr) {
-      return arr.sort((a, b) => {
-        const aIsDigit = /^\d/.test(a);
-        const bIsDigit = /^\d/.test(b);
-        return aIsDigit !== bIsDigit ? (aIsDigit ? 1 : -1) : a.localeCompare(b);
+    function exportCSV(data, filename) {
+      if (!data.length) return;
+      const headers = Object.keys(data[0].full);
+      const rows = [headers.join(",")];
+      data.forEach(r => {
+        const row = headers.map(h => JSON.stringify(r.full[h] || ""));
+        rows.push(row.join(","));
       });
+      const blob = new Blob([rows.join("\n")], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     }
-
-    function buildDeviceDetailsMap(file, callback) {
-  const reader = new FileReader();
-  reader.onload = function(event) {
-    const csvData = event.target.result;
-    Papa.parse(csvData, {
-      header: true,
-      skipEmptyLines: true,
-      complete: function(results) {
-        const map = new Map();
-        results.data.forEach(row => {
-          const hostname = row["Hostname"]?.trim().toUpperCase();
-          const lastSeen = row["Last Seen"]?.trim() || "";
-          const lastReboot = row["Last Reboot"]?.trim() || "";
-          if (hostname) {
-            map.set(hostname, { lastSeen, lastReboot });
-          }
-        });
-        callback(map);
-      }
-    });
-  };
-  reader.readAsText(file);
-}
-
-    
-    function compareCSV() {
-  const devicesFile = document.getElementById("devicesFile").files[0];
-  const workstationsFile = document.getElementById("workstationsFile").files[0];
-
-  if (!devicesFile || !workstationsFile) {
-    alert("Please select both CSV files.");
-    return;
-  }
-
-  document.getElementById("status").innerText = "Processing...";
-
-  readColumn(devicesFile, "Hostname", function(devicesSet) {
-    readColumn(workstationsFile, "Device ID", function(workstationsSet) {
-      const inDevicesNotWorkstations = customSort([...devicesSet].filter(x => !workstationsSet.has(x)));
-      const inWorkstationsNotDevices = customSort([...workstationsSet].filter(x => !devicesSet.has(x)));
-
-      buildDeviceDetailsMap(devicesFile, function(deviceDetailsMap) {
-        const enrichedDevices = inDevicesNotWorkstations.map(hostname => {
-          const details = deviceDetailsMap.get(hostname) || { lastSeen: "", lastReboot: "" };
-          return [hostname, details.lastSeen, details.lastReboot];
-        });
-
-        generateCSV(enrichedDevices, inWorkstationsNotDevices);
-      });
-    });
-  });
-}
-
-
-    function generateCSV(devicesList, workstationsList) {
-  const maxLength = Math.max(devicesList.length, workstationsList.length);
-  while (devicesList.length < maxLength) devicesList.push(["", "", ""]);
-  while (workstationsList.length < maxLength) workstationsList.push("");
-
-  let csvContent = "data:text/csv;charset=utf-8,In Datto Not Airtable - Hostname,Last Seen,Last Reboot,In Airtable Not Datto\n";
-  for (let i = 0; i < maxLength; i++) {
-    const [hostname, lastSeen, lastReboot] = devicesList[i];
-    const airtable = workstationsList[i];
-    csvContent += `${hostname},${lastSeen},${lastReboot},${airtable}\n`;
-  }
-
-  const encodedUri = encodeURI(csvContent);
-  const link = document.createElement("a");
-  link.setAttribute("href", encodedUri);
-  link.setAttribute("download", "Differences.csv");
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-
-  document.getElementById("status").innerText = "Comparison complete. File downloaded.";
-}
-
   </script>
 </body>
 </html>
