@@ -195,7 +195,7 @@ setupDropZone("pivotDrop", "pivotFile", "pivotPreview", "pivotPreviewWrapper");
             row => row[Object.keys(row)[10]]?.includes("-RE")
           );
 
-          // Build from unmatch
+          // Build from unmatchName
           unmatch.forEach(row => {
             const a = row[Object.keys(row)[0]]?.trim(); // A
             const c = row[Object.keys(row)[2]]?.trim(); // C
@@ -207,17 +207,17 @@ setupDropZone("pivotDrop", "pivotFile", "pivotPreview", "pivotPreviewWrapper");
             if (!unmatchGrouped.has(a)) unmatchGrouped.set(a, []);
             unmatchGrouped.get(a).push({
               Source: "Unmatch",
-              DebtorNumber: a,
-              UnmatchRef: c,
-              E: row[Object.keys(row)[4]],
-              F: row[Object.keys(row)[5]],
-              G: row[Object.keys(row)[6]],
-              H: row[Object.keys(row)[7]],
-              PivotRef: "",
-              B: "",
-              C: "",
-              D: "",
-              K: ""
+              um_debtorNumber: a,
+              um_ref2: c,
+              um_revQ_LName: row[Object.keys(row)[4]],
+              um_revQ_FName: row[Object.keys(row)[5]],
+              um_src_LName: row[Object.keys(row)[6]],
+              um_src_FName: row[Object.keys(row)[7]],
+              piv_ref2: "",
+              piv_acctStatus: "",
+              piv_LName: "",
+              piv_FName: "",
+              piv_acctType: ""
             });
           });
 
@@ -233,17 +233,17 @@ setupDropZone("pivotDrop", "pivotFile", "pivotPreview", "pivotPreviewWrapper");
             if (!pivotGrouped.has(a)) pivotGrouped.set(a, []);
             pivotGrouped.get(a).push({
               Source: "Pivot",
-              DebtorNumber: a,
-              UnmatchRef: "",
-              E: "",
-              F: "",
-              G: "",
-              H: "",
-              PivotRef: i,
-              B: row[Object.keys(row)[1]],
-              C: row[Object.keys(row)[2]],
-              D: row[Object.keys(row)[3]],
-              K: row[Object.keys(row)[10]]
+              um_debtorNumber: a,
+              um_ref2: "",
+              um_revQ_LName: "",
+              um_revQ_FName: "",
+              um_src_LName: "",
+              um_src_FName: "",
+              piv_ref2: i,
+              piv_acctStatus: row[Object.keys(row)[1]],
+              piv_LName: row[Object.keys(row)[2]],
+              piv_FName: row[Object.keys(row)[3]],
+              piv_acctType: row[Object.keys(row)[10]]
             });
           });
 
@@ -272,11 +272,13 @@ setupDropZone("pivotDrop", "pivotFile", "pivotPreview", "pivotPreviewWrapper");
 
 
 
+
     function exportCSV(data, filename) {
   if (!data.length) return;
   const headers = [
-    "Source", "DebtorNumber", "UnmatchRef", "E", "F", "G", "H",
-    "PivotRef", "B", "C", "D", "K"
+    "Source",
+    "um_debtorNumber", "um_ref2", "um_revQ_LName", "um_revQ_FName", "um_src_LName", "um_src_FName",
+    "piv_ref2", "piv_acctStatus", "piv_LName", "piv_FName", "piv_acctType"
   ];
   const rows = [headers.join(",")];
   data.forEach(row => {
@@ -292,6 +294,7 @@ setupDropZone("pivotDrop", "pivotFile", "pivotPreview", "pivotPreviewWrapper");
   link.click();
   document.body.removeChild(link);
 }
+
 
 
   </script>
