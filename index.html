@@ -169,83 +169,115 @@ setupDropZone("pivotDrop", "pivotFile", "pivotPreview", "pivotPreviewWrapper");
 
 
     function processFiles() {
-      const unmatchFile = document.getElementById("unmatchFile").files[0];
-      const pivotFile = document.getElementById("pivotFile").files[0];
-      if (!unmatchFile || !pivotFile) {
-        alert("Please upload both files.");
-        return;
-      }
+  const unmatchFile = document.getElementById("unmatchFile").files[0];
+  const pivotFile = document.getElementById("pivotFile").files[0];
+  if (!unmatchFile || !pivotFile) {
+    alert("Please upload both files.");
+    return;
+  }
 
-      document.getElementById("status").innerText = "Processing...";
+  document.getElementById("status").innerText = "Processing...";
 
-      Papa.parse(unmatchFile, {
+  Papa.parse(unmatchFile, {
+    header: true,
+    skipEmptyLines: true,
+    complete: function(unmatchResults) {
+      Papa.parse(pivotFile, {
         header: true,
         skipEmptyLines: true,
-        complete: function(unmatchResults) {
-          const unmatchRows = unmatchResults.data.map(row => ({
-            keyA: row[Object.keys(row)[0]]?.trim(),
-            keyC: row[Object.keys(row)[2]]?.trim(),
-            extra: [row[Object.keys(row)[4]], row[Object.keys(row)[5]], row[Object.keys(row)[6]], row[Object.keys(row)[7]]],
-            full: row
-          }));
+        complete: function(pivotResults) {
+          const refMap = new Map(); // DebtorNumber -> Set of Reference2s
+          const unmatchGrouped = new Map(); // DebtorNumber -> [rows]
+          const pivotGrouped = new Map();   // DebtorNumber -> [rows]
 
-          Papa.parse(pivotFile, {
-            header: true,
-            skipEmptyLines: true,
-            complete: function(pivotResults) {
-              const pivotMap = new Map();
-              pivotResults.data.forEach(row => {
-                if (row[Object.keys(row)[10]]?.includes("-RE")) {
-                  const keyA = row[Object.keys(row)[0]]?.trim();
-                  const keyI = row[Object.keys(row)[8]]?.trim();
-                  const extras = [row[Object.keys(row)[1]], row[Object.keys(row)[2]], row[Object.keys(row)[3]], row[Object.keys(row)[10]]];
-                  if (!pivotMap.has(keyA)) pivotMap.set(keyA, []);
-                  pivotMap.get(keyA).push({ keyI, extras });
-                }
-              });
+          const unmatch = unmatchResults.data;
+          const pivot = pivotResults.data.filter(
+            row => row[Object.keys(row)[10]]?.includes("-RE") // BinName contains -RE
+          );
 
-              const singleMatch = [];
-              const multiMatch = [];
-              const groupByKeyA = {};
+          // Build unmatchName reference sets and groupings
+          unmatch.forEach(row => {
+            const a = row[Object.keys(row)[0]]?.trim(); // column A
+            const c = row[Object.keys(row)[2]]?.trim(); // column C
+            if (!a || !c) return;
 
-              unmatchRows.forEach(row => {
-                if (!groupByKeyA[row.keyA]) groupByKeyA[row.keyA] = new Set();
-                groupByKeyA[row.keyA].add(row.keyC);
-              });
+            if (!refMap.has(a)) refMap.set(a, new Set());
+            refMap.get(a).add(c);
 
-              Object.entries(groupByKeyA).forEach(([keyA, set]) => {
-                const matchedRows = unmatchRows.filter(r => r.keyA === keyA);
-                if (set.size > 1) multiMatch.push(...matchedRows);
-                else singleMatch.push(...matchedRows);
-              });
-
-              exportCSV(singleMatch, "single_match.csv");
-              exportCSV(multiMatch, "multi_match.csv");
-
-              document.getElementById("status").innerText = `Done! Downloaded ${singleMatch.length} single-match rows and ${multiMatch.length} multi-match rows.`;
-            }
+            if (!unmatchGrouped.has(a)) unmatchGrouped.set(a, []);
+            unmatchGrouped.get(a).push({
+              A: a,
+              C: c,
+              E: row[Object.keys(row)[4]],
+              F: row[Object.keys(row)[5]],
+              G: row[Object.keys(row)[6]],
+              H: row[Object.keys(row)[7]]
+            });
           });
+
+          // Build pivot reference sets and groupings
+          pivot.forEach(row => {
+            const a = row[Object.keys(row)[0]]?.trim(); // column A
+            const i = row[Object.keys(row)[8]]?.trim(); // column I
+            if (!a || !i) return;
+
+            if (!refMap.has(a)) refMap.set(a, new Set());
+            refMap.get(a).add(i);
+
+            if (!pivotGrouped.has(a)) pivotGrouped.set(a, []);
+            pivotGrouped.get(a).push({
+              A: a,
+              I: i,
+              B: row[Object.keys(row)[1]],
+              C: row[Object.keys(row)[2]],
+              D: row[Object.keys(row)[3]],
+              K: row[Object.keys(row)[10]]
+            });
+          });
+
+          // Split into single and multi match sets
+          const singleData = [];
+          const multiData = [];
+
+          refMap.forEach((refSet, debtor) => {
+            const target = refSet.size > 1 ? multiData : singleData;
+            const unmatchRows = unmatchGrouped.get(debtor) || [];
+            const pivotRows = pivotGrouped.get(debtor) || [];
+
+            unmatchRows.forEach(row => target.push({ Source: "Unmatch", ...row }));
+            pivotRows.forEach(row => target.push({ Source: "Pivot", ...row }));
+          });
+
+          exportCSV(singleData, "single_match.csv");
+          exportCSV(multiData, "multi_match.csv");
+
+          document.getElementById("status").innerText =
+            `Done! Exported ${singleData.length} single-match and ${multiData.length} multi-match rows.`;
         }
       });
     }
+  });
+}
+
 
     function exportCSV(data, filename) {
-      if (!data.length) return;
-      const headers = Object.keys(data[0].full);
-      const rows = [headers.join(",")];
-      data.forEach(r => {
-        const row = headers.map(h => JSON.stringify(r.full[h] || ""));
-        rows.push(row.join(","));
-      });
-      const blob = new Blob([rows.join("\n")], { type: 'text/csv' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    }
+  if (!data.length) return;
+  const headers = Object.keys(data[0]);
+  const rows = [headers.join(",")];
+  data.forEach(row => {
+    const line = headers.map(h => JSON.stringify(row[h] ?? ""));
+    rows.push(line.join(","));
+  });
+  const blob = new Blob([rows.join("\n")], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
   </script>
 </body>
 </html>
