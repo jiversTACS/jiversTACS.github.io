@@ -27,6 +27,7 @@
       display: flex;
       flex-direction: column;
       align-items: center;
+      margin-bottom: 30px;
     }
     .drop-zone {
       padding: 20px;
@@ -59,44 +60,113 @@
       margin-top: 20px;
       text-align: center;
     }
+    .file-preview {
+  background: #fff;
+  padding: 10px;
+  border: 1px solid #ccc;
+  margin-top: 10px;
+  border-radius: 5px;
+  font-size: 0.9em;
+  max-height: 150px;
+  overflow-y: auto;
+  overflow-x: auto;
+  width: 100%;
+  max-width: 500px;
+  box-sizing: border-box;
+  white-space: nowrap;
+}
+
+.preview-wrapper {
+  display: none;
+  text-align: left;
+  margin-top: 10px;
+}
+
   </style>
 </head>
 <body>
   <h2>UnmatchName Matcher</h2>
-  <div class="upload-container">
-    <div class="upload-section">
-      <div class="drop-zone" id="unmatchDrop">Upload UnmatchName File</div>
-      <input type="file" id="unmatchFile" accept=".csv">
-    </div>
-    <div class="upload-section">
-      <div class="drop-zone" id="pivotDrop">Upload Pivot File</div>
-      <input type="file" id="pivotFile" accept=".csv">
-    </div>
+  <div class="upload-section">
+  <div class="drop-zone" id="unmatchDrop">Drop or click to upload UnmatchName File</div>
+  <input type="file" id="unmatchFile" accept=".csv" style="display:none">
+
+  <div class="preview-wrapper" id="unmatchPreviewWrapper" style="display: none;">
+    <label><strong>Preview</strong></label>
+    <div class="file-preview" id="unmatchPreview"></div>
   </div>
+</div>
+
+<div class="upload-section">
+  <div class="drop-zone" id="pivotDrop">Drop or click to upload Pivot File</div>
+  <input type="file" id="pivotFile" accept=".csv" style="display:none">
+
+  <div class="preview-wrapper" id="pivotPreviewWrapper" style="display: none;">
+    <label><strong>Preview</strong></label>
+    <div class="file-preview" id="pivotPreview"></div>
+  </div>
+</div>
+
 
   <button onclick="processFiles()">Generate Output</button>
   <p id="status"></p>
 
   <script>
-    function setupDropZone(dropId, inputId) {
-      const dropZone = document.getElementById(dropId);
-      const fileInput = document.getElementById(inputId);
-      dropZone.addEventListener('click', () => fileInput.click());
-      dropZone.addEventListener('dragover', e => {
-        e.preventDefault();
-        dropZone.classList.add('dragover');
-      });
-      dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
-      dropZone.addEventListener('drop', e => {
-        e.preventDefault();
-        dropZone.classList.remove('dragover');
-        const file = e.dataTransfer.files[0];
-        fileInput.files = e.dataTransfer.files;
-      });
-    }
+    function setupDropZone(dropId, inputId, previewId, wrapperId) {
+  const dropZone = document.getElementById(dropId);
+  const input = document.getElementById(inputId);
+  const preview = document.getElementById(previewId);
+  const wrapper = document.getElementById(wrapperId);
 
-    setupDropZone("unmatchDrop", "unmatchFile");
-    setupDropZone("pivotDrop", "pivotFile");
+  function showPreview(file) {
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      preview: 5,
+      complete: function(results) {
+        const headers = results.meta.fields;
+        let html = `<strong>${file.name}</strong><br><table><tr>`;
+        headers.forEach(h => html += `<th>${h}</th>`);
+        html += '</tr>';
+        results.data.forEach(row => {
+          html += '<tr>';
+          headers.forEach(h => html += `<td>${row[h]}</td>`);
+          html += '</tr>';
+        });
+        html += '</table>';
+        preview.innerHTML = html;
+        wrapper.style.display = 'block';
+      }
+    });
+  }
+
+  dropZone.addEventListener('click', () => input.click());
+
+  dropZone.addEventListener('dragover', e => {
+    e.preventDefault();
+    dropZone.classList.add('dragover');
+  });
+
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('dragover');
+    const file = e.dataTransfer.files[0];
+    if (file) {
+      input.files = e.dataTransfer.files;
+      showPreview(file);
+    }
+  });
+
+  input.addEventListener('change', () => {
+    if (input.files[0]) showPreview(input.files[0]);
+  });
+}
+
+
+    setupDropZone("unmatchDrop", "unmatchFile", "unmatchPreview", "unmatchPreviewWrapper");
+setupDropZone("pivotDrop", "pivotFile", "pivotPreview", "pivotPreviewWrapper");
+
 
     function processFiles() {
       const unmatchFile = document.getElementById("unmatchFile").files[0];
