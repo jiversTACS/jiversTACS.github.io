@@ -213,6 +213,7 @@ setupDropZone("pivotDrop", "pivotFile", "pivotPreview", "pivotPreviewWrapper");
               um_revQ_FName: row[Object.keys(row)[5]],
               um_src_LName: row[Object.keys(row)[6]],
               um_src_FName: row[Object.keys(row)[7]],
+              src_name2: row[Object.keys(row)[8]],
               piv_ref2: "",
               piv_acctStatus: "",
               piv_LName: "",
@@ -222,8 +223,7 @@ setupDropZone("pivotDrop", "pivotFile", "pivotPreview", "pivotPreviewWrapper");
               src_addr2: row[Object.keys(row)[11]],
               src_city: row[Object.keys(row)[12]],
               src_state: row[Object.keys(row)[13]],
-              src_zip: row[Object.keys(row)[14]],
-              src_name2: row[Object.keys(row)[8]]
+              src_zip: row[Object.keys(row)[14]]
             });
           });
 
@@ -289,12 +289,12 @@ setupDropZone("pivotDrop", "pivotFile", "pivotPreview", "pivotPreviewWrapper");
                     um_debtorNumber: debtor,
                     um_src_LName: fullRow[Object.keys(fullRow)[6]],
                     um_src_FName: fullRow[Object.keys(fullRow)[7]],
+                    src_name2: fullRow[Object.keys(fullRow)[8]],
                     src_addr1: fullRow[Object.keys(fullRow)[10]],
                     src_addr2: fullRow[Object.keys(fullRow)[11]],
                     src_city: fullRow[Object.keys(fullRow)[12]],
                     src_state: fullRow[Object.keys(fullRow)[13]],
-                    src_zip: fullRow[Object.keys(fullRow)[14]],
-                    src_name2: fullRow[Object.keys(fullRow)[8]]
+                    src_zip: fullRow[Object.keys(fullRow)[14]]
                   });
                 }
               }
