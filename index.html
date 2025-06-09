@@ -186,9 +186,9 @@ setupDropZone("pivotDrop", "pivotFile", "pivotPreview", "pivotPreviewWrapper");
         header: true,
         skipEmptyLines: true,
         complete: function(pivotResults) {
-          const refMap = new Map(); // DebtorNumber -> Set of Reference2s
-          const unmatchGrouped = new Map(); // DebtorNumber -> [unmatchRows]
-          const pivotGrouped = new Map();   // DebtorNumber -> [pivotRows]
+          const refMap = new Map();
+          const unmatchGrouped = new Map();
+          const pivotGrouped = new Map();
 
           const unmatch = unmatchResults.data;
           const pivot = pivotResults.data.filter(
@@ -197,8 +197,8 @@ setupDropZone("pivotDrop", "pivotFile", "pivotPreview", "pivotPreviewWrapper");
 
           // Build from unmatchName
           unmatch.forEach(row => {
-            const a = row[Object.keys(row)[0]]?.trim(); // A
-            const c = row[Object.keys(row)[2]]?.trim(); // C
+            const a = row[Object.keys(row)[0]]?.trim(); // um_debtorNumber
+            const c = row[Object.keys(row)[2]]?.trim(); // um_ref2
             if (!a || !c) return;
 
             if (!refMap.has(a)) refMap.set(a, new Set());
@@ -223,8 +223,8 @@ setupDropZone("pivotDrop", "pivotFile", "pivotPreview", "pivotPreviewWrapper");
 
           // Build from pivot
           pivot.forEach(row => {
-            const a = row[Object.keys(row)[0]]?.trim(); // A
-            const i = row[Object.keys(row)[8]]?.trim(); // I
+            const a = row[Object.keys(row)[0]]?.trim(); // piv_debtorNumber
+            const i = row[Object.keys(row)[8]]?.trim(); // piv_ref2
             if (!a || !i) return;
 
             if (!refMap.has(a)) refMap.set(a, new Set());
@@ -247,7 +247,6 @@ setupDropZone("pivotDrop", "pivotFile", "pivotPreview", "pivotPreviewWrapper");
             });
           });
 
-          // Final output containers
           const singleMatch = [];
           const multiMatch = [];
 
@@ -259,11 +258,42 @@ setupDropZone("pivotDrop", "pivotFile", "pivotPreview", "pivotPreviewWrapper");
             target.push(...pivotRows);
           });
 
+          // ✅ Generate to_import.csv from single-match unmatch rows
+          const seenDebtors = new Set();
+          const toImport = [];
+
+          singleMatch.forEach(row => {
+            if (row.Source === "Unmatch") {
+              const debtor = row.um_debtorNumber;
+              if (!seenDebtors.has(debtor)) {
+                seenDebtors.add(debtor);
+
+                const fullRow = unmatch.find(r =>
+                  r[Object.keys(r)[0]]?.trim() === debtor
+                );
+
+                if (fullRow) {
+                  toImport.push({
+                    um_debtorNumber: debtor,
+                    um_src_LName: fullRow[Object.keys(fullRow)[6]],
+                    um_src_FName: fullRow[Object.keys(fullRow)[7]],
+                    src_addr1: fullRow[Object.keys(fullRow)[10]],
+                    src_addr2: fullRow[Object.keys(fullRow)[11]],
+                    src_city: fullRow[Object.keys(fullRow)[12]],
+                    src_state: fullRow[Object.keys(fullRow)[13]],
+                    src_zip: fullRow[Object.keys(fullRow)[14]]
+                  });
+                }
+              }
+            }
+          });
+
           exportCSV(singleMatch, "single_match.csv");
           exportCSV(multiMatch, "multi_match.csv");
+          exportCSV(toImport, "to_import.csv");
 
           document.getElementById("status").innerText =
-            `Done! Exported ${singleMatch.length} single-match and ${multiMatch.length} multi-match rows.`;
+            `Done! Exported ${singleMatch.length} single-match, ${multiMatch.length} multi-match, and ${toImport.length} to-import rows.`;
         }
       });
     }
@@ -273,13 +303,10 @@ setupDropZone("pivotDrop", "pivotFile", "pivotPreview", "pivotPreviewWrapper");
 
 
 
+
     function exportCSV(data, filename) {
   if (!data.length) return;
-  const headers = [
-    "Source",
-    "um_debtorNumber", "um_ref2", "um_revQ_LName", "um_revQ_FName", "um_src_LName", "um_src_FName",
-    "piv_ref2", "piv_acctStatus", "piv_LName", "piv_FName", "piv_acctType"
-  ];
+  const headers = Object.keys(data[0]);
   const rows = [headers.join(",")];
   data.forEach(row => {
     const line = headers.map(h => JSON.stringify(row[h] ?? ""));
@@ -294,6 +321,7 @@ setupDropZone("pivotDrop", "pivotFile", "pivotPreview", "pivotPreviewWrapper");
   link.click();
   document.body.removeChild(link);
 }
+
 
 
 
