@@ -289,7 +289,38 @@ setupDropZone("pivotDrop", "pivotFile", "pivotPreview", "pivotPreviewWrapper");
           });
 
           exportCSV(singleMatch, "single_match.csv");
-          exportCSV(multiMatch, "multi_match.csv");
+          
+          // Step 1: Build set of all debtor numbers from unmatchName
+const unmatchDebtors = new Set();
+unmatch.forEach(row => {
+  const debtor = row[Object.keys(row)[0]]?.trim();
+  if (debtor) unmatchDebtors.add(debtor);
+});
+
+// Step 2: Filter multiMatch down to one unique (debtor + ref2) per row,
+// but only for debtors that exist in unmatchName
+const seenRefCombos = new Set();
+const filteredMultiMatch = [];
+
+multiMatch.forEach(row => {
+  const debtor = row.um_debtorNumber;
+  const ref2 = row.um_ref2 || row.piv_ref2;
+  const comboKey = `${debtor}||${ref2}`;
+
+  if (
+    debtor &&
+    ref2 &&
+    unmatchDebtors.has(debtor) &&
+    !seenRefCombos.has(comboKey)
+  ) {
+    seenRefCombos.add(comboKey);
+    filteredMultiMatch.push(row);
+  }
+});
+
+exportCSV(filteredMultiMatch, "multi_match.csv");
+
+          
           exportCSV(toImport, "to_import.csv");
 
           document.getElementById("status").innerText =
