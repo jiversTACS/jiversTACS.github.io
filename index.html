@@ -197,8 +197,8 @@ setupDropZone("pivotDrop", "pivotFile", "pivotPreview", "pivotPreviewWrapper");
 
           // Build from unmatchName
           unmatch.forEach(row => {
-            const a = row[Object.keys(row)[0]]?.trim(); // um_debtorNumber
-            const c = row[Object.keys(row)[2]]?.trim(); // um_ref2
+            const a = row[Object.keys(row)[0]]?.trim(); // A
+            const c = row[Object.keys(row)[2]]?.trim(); // C
             if (!a || !c) return;
 
             if (!refMap.has(a)) refMap.set(a, new Set());
@@ -217,14 +217,20 @@ setupDropZone("pivotDrop", "pivotFile", "pivotPreview", "pivotPreviewWrapper");
               piv_acctStatus: "",
               piv_LName: "",
               piv_FName: "",
-              piv_acctType: ""
+              piv_acctType: "",
+              src_addr1: row[Object.keys(row)[10]],
+              src_addr2: row[Object.keys(row)[11]],
+              src_city: row[Object.keys(row)[12]],
+              src_state: row[Object.keys(row)[13]],
+              src_zip: row[Object.keys(row)[14]],
+              src_name2: row[Object.keys(row)[8]]
             });
           });
 
           // Build from pivot
           pivot.forEach(row => {
-            const a = row[Object.keys(row)[0]]?.trim(); // piv_debtorNumber
-            const i = row[Object.keys(row)[8]]?.trim(); // piv_ref2
+            const a = row[Object.keys(row)[0]]?.trim(); // A
+            const i = row[Object.keys(row)[8]]?.trim(); // I
             if (!a || !i) return;
 
             if (!refMap.has(a)) refMap.set(a, new Set());
@@ -243,7 +249,13 @@ setupDropZone("pivotDrop", "pivotFile", "pivotPreview", "pivotPreviewWrapper");
               piv_acctStatus: row[Object.keys(row)[1]],
               piv_LName: row[Object.keys(row)[2]],
               piv_FName: row[Object.keys(row)[3]],
-              piv_acctType: row[Object.keys(row)[10]]
+              piv_acctType: row[Object.keys(row)[10]],
+              src_addr1: "",
+              src_addr2: "",
+              src_city: "",
+              src_state: "",
+              src_zip: "",
+              src_name2: ""
             });
           });
 
@@ -281,55 +293,52 @@ setupDropZone("pivotDrop", "pivotFile", "pivotPreview", "pivotPreviewWrapper");
                     src_addr2: fullRow[Object.keys(fullRow)[11]],
                     src_city: fullRow[Object.keys(fullRow)[12]],
                     src_state: fullRow[Object.keys(fullRow)[13]],
-                    src_zip: fullRow[Object.keys(fullRow)[14]]
+                    src_zip: fullRow[Object.keys(fullRow)[14]],
+                    src_name2: fullRow[Object.keys(fullRow)[8]]
                   });
                 }
               }
             }
           });
 
-          exportCSV(singleMatch, "single_match.csv");
-          
-          // Step 1: Build set of all debtor numbers from unmatchName
-const unmatchDebtors = new Set();
-unmatch.forEach(row => {
-  const debtor = row[Object.keys(row)[0]]?.trim();
-  if (debtor) unmatchDebtors.add(debtor);
-});
+          // ✅ Filter and export multi_match.csv
+          const unmatchDebtors = new Set();
+          unmatch.forEach(row => {
+            const debtor = row[Object.keys(row)[0]]?.trim();
+            if (debtor) unmatchDebtors.add(debtor);
+          });
 
-// Step 2: Filter multiMatch down to one unique (debtor + ref2) per row,
-// but only for debtors that exist in unmatchName
-const seenRefCombos = new Set();
-const filteredMultiMatch = [];
+          const seenRefCombos = new Set();
+          const filteredMultiMatch = [];
 
-multiMatch.forEach(row => {
-  const debtor = row.um_debtorNumber;
-  const ref2 = row.um_ref2 || row.piv_ref2;
-  const comboKey = `${debtor}||${ref2}`;
+          multiMatch.forEach(row => {
+            const debtor = row.um_debtorNumber;
+            const ref2 = row.um_ref2 || row.piv_ref2;
+            const comboKey = `${debtor}||${ref2}`;
 
-  if (
-    debtor &&
-    ref2 &&
-    unmatchDebtors.has(debtor) &&
-    !seenRefCombos.has(comboKey)
-  ) {
-    seenRefCombos.add(comboKey);
-    filteredMultiMatch.push(row);
-  }
-});
+            if (
+              debtor &&
+              ref2 &&
+              unmatchDebtors.has(debtor) &&
+              !seenRefCombos.has(comboKey)
+            ) {
+              seenRefCombos.add(comboKey);
+              filteredMultiMatch.push(row);
+            }
+          });
 
-exportCSV(filteredMultiMatch, "multi_match.csv");
-
-          
+          // Final exports
+          exportCSV(filteredMultiMatch, "multi_match.csv");
           exportCSV(toImport, "to_import.csv");
 
           document.getElementById("status").innerText =
-            `Done! Exported ${singleMatch.length} single-match, ${multiMatch.length} multi-match, and ${toImport.length} to-import rows.`;
+            `Done! Exported ${filteredMultiMatch.length} multi-match and ${toImport.length} to-import rows.`;
         }
       });
     }
   });
 }
+
 
 
 
