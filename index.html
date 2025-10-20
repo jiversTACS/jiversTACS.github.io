@@ -364,12 +364,24 @@
                     ? (row.um_ref2 || row.piv_ref2)
                     : (row.um_ref3 || row.piv_ref3);
                   if (!debtor || !refVal) return;
+                
                   const key = `${debtor}||${refVal}`;
-                  if (!unmatchCombos.has(key)) return;
+                  if (!unmatchCombos.has(key)) return;      // keep only combos present in Unmatch
                   if (seenCombos.has(key)) return;
                   seenCombos.add(key);
+                
+                  // NEW: surface all/other match values for this debtor (from both files)
+                  const allVals = Array.from(refMap.get(debtor) || []);
+                  const others  = allVals.filter(v => v && v !== refVal);
+                
+                  // attach new context columns (names are key-agnostic so they work for ref2 or ref3)
+                  row.all_match_values   = allVals.join('|');   // e.g., "ABC|DEF|GHI"
+                  row.other_match_values = others.join('|');    // e.g., "DEF|GHI"
+                  row.match_key_used     = matchKey.toUpperCase(); // "REF2" or "REF3" for clarity
+                
                   filteredMultiMatch.push(row);
                 });
+
 
                 // Sort for readability
                 toImport.sort((a,b) => (a.um_debtorNumber||'').localeCompare(b.um_debtorNumber||''));
