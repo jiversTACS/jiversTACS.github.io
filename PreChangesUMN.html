@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>UnmatchName Matcher</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 900px;
+      margin: 40px auto;
+      padding: 20px;
+      background-color: #f4f4f4;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    h2 { text-align: center; }
+    .upload-container {
+      display: flex;
+      gap: 20px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: 30px;
+    }
+    .upload-section {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin-bottom: 30px;
+    }
+    .drop-zone {
+      padding: 20px;
+      border: 2px dashed #ccc;
+      border-radius: 8px;
+      background-color: white;
+      text-align: center;
+      width: 300px;
+      cursor: pointer;
+    }
+    .drop-zone.dragover {
+      background-color: #e0f7fa;
+      border-color: #00acc1;
+    }
+    input[type="file"] { display: none; }
+    button {
+      display: block;
+      width: 200px;
+      margin: 0 auto;
+      padding: 10px;
+      font-size: 16px;
+      background-color: #007BFF;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    button:hover { background-color: #0056b3; }
+    #status {
+      margin-top: 20px;
+      text-align: center;
+    }
+    .file-preview {
+  background: #fff;
+  padding: 10px;
+  border: 1px solid #ccc;
+  margin-top: 10px;
+  border-radius: 5px;
+  font-size: 0.9em;
+  max-height: 150px;
+  overflow-y: auto;
+  overflow-x: auto;
+  width: 100%;
+  max-width: 500px;
+  box-sizing: border-box;
+  white-space: nowrap;
+}
+
+.preview-wrapper {
+  display: none;
+  text-align: left;
+  margin-top: 10px;
+}
+
+  </style>
+</head>
+<body>
+  <h2>UnmatchName Matcher</h2>
+  <div class="upload-section">
+  <div class="drop-zone" id="unmatchDrop">Drop or click to upload UnmatchName File</div>
+  <input type="file" id="unmatchFile" accept=".csv" style="display:none">
+
+  <div class="preview-wrapper" id="unmatchPreviewWrapper" style="display: none;">
+    <label><strong>Preview</strong></label>
+    <div class="file-preview" id="unmatchPreview"></div>
+  </div>
+</div>
+
+<div class="upload-section">
+  <div class="drop-zone" id="pivotDrop">Drop or click to upload Pivot File</div>
+  <input type="file" id="pivotFile" accept=".csv" style="display:none">
+
+  <div class="preview-wrapper" id="pivotPreviewWrapper" style="display: none;">
+    <label><strong>Preview</strong></label>
+    <div class="file-preview" id="pivotPreview"></div>
+  </div>
+</div>
+
+
+  <button onclick="processFiles()">Generate Output</button>
+  <p id="status"></p>
+
+  <script>
+    function setupDropZone(dropId, inputId, previewId, wrapperId) {
+  const dropZone = document.getElementById(dropId);
+  const input = document.getElementById(inputId);
+  const preview = document.getElementById(previewId);
+  const wrapper = document.getElementById(wrapperId);
+
+  function showPreview(file) {
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      preview: 5,
+      complete: function(results) {
+        const headers = results.meta.fields;
+        let html = `<strong>${file.name}</strong><br><table><tr>`;
+        headers.forEach(h => html += `<th>${h}</th>`);
+        html += '</tr>';
+        results.data.forEach(row => {
+          html += '<tr>';
+          headers.forEach(h => html += `<td>${row[h]}</td>`);
+          html += '</tr>';
+        });
+        html += '</table>';
+        preview.innerHTML = html;
+        wrapper.style.display = 'block';
+      }
+    });
+  }
+
+  dropZone.addEventListener('click', () => input.click());
+
+  dropZone.addEventListener('dragover', e => {
+    e.preventDefault();
+    dropZone.classList.add('dragover');
+  });
+
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('dragover');
+    const file = e.dataTransfer.files[0];
+    if (file) {
+      input.files = e.dataTransfer.files;
+      showPreview(file);
+    }
+  });
+
+  input.addEventListener('change', () => {
+    if (input.files[0]) showPreview(input.files[0]);
+  });
+}
+
+
+    setupDropZone("unmatchDrop", "unmatchFile", "unmatchPreview", "unmatchPreviewWrapper");
+setupDropZone("pivotDrop", "pivotFile", "pivotPreview", "pivotPreviewWrapper");
+
+
+    function processFiles() {
+  const unmatchFile = document.getElementById("unmatchFile").files[0];
+  const pivotFile = document.getElementById("pivotFile").files[0];
+  if (!unmatchFile || !pivotFile) {
+    alert("Please upload both files.");
+    return;
+  }
+
+  document.getElementById("status").innerText = "Processing...";
+
+  Papa.parse(unmatchFile, {
+    header: true,
+    skipEmptyLines: true,
+    complete: function(unmatchResults) {
+      Papa.parse(pivotFile, {
+        header: true,
+        skipEmptyLines: true,
+        complete: function(pivotResults) {
+          const refMap = new Map();
+          const unmatchGrouped = new Map();
+          const pivotGrouped = new Map();
+
+          const unmatch = unmatchResults.data;
+          const pivot = pivotResults.data.filter(
+            row => row[Object.keys(row)[10]]?.includes("-RE")
+          );
+
+          // Build from unmatchName
+          unmatch.forEach(row => {
+            const a = row[Object.keys(row)[0]]?.trim(); // A
+            const c = row[Object.keys(row)[2]]?.trim(); // C
+            if (!a || !c) return;
+
+            if (!refMap.has(a)) refMap.set(a, new Set());
+            refMap.get(a).add(c);
+
+            if (!unmatchGrouped.has(a)) unmatchGrouped.set(a, []);
+            unmatchGrouped.get(a).push({
+              Source: "Unmatch",
+              um_debtorNumber: a,
+              um_ref2: c,
+              um_revQ_LName: row[Object.keys(row)[4]],
+              um_revQ_FName: row[Object.keys(row)[5]],
+              um_src_LName: row[Object.keys(row)[6]],
+              um_src_FName: row[Object.keys(row)[7]],
+              src_name2: row[Object.keys(row)[8]],
+              piv_ref2: "",
+              piv_acctStatus: "",
+              piv_LName: "",
+              piv_FName: "",
+              piv_acctType: "",
+              src_addr1: row[Object.keys(row)[10]],
+              src_addr2: row[Object.keys(row)[11]],
+              src_city: row[Object.keys(row)[12]],
+              src_state: row[Object.keys(row)[13]],
+              src_zip: row[Object.keys(row)[14]]
+            });
+          });
+
+          // Build from pivot
+          pivot.forEach(row => {
+            const a = row[Object.keys(row)[0]]?.trim(); // A
+            const i = row[Object.keys(row)[8]]?.trim(); // I
+            if (!a || !i) return;
+
+            if (!refMap.has(a)) refMap.set(a, new Set());
+            refMap.get(a).add(i);
+
+            if (!pivotGrouped.has(a)) pivotGrouped.set(a, []);
+            pivotGrouped.get(a).push({
+              Source: "Pivot",
+              um_debtorNumber: a,
+              um_ref2: "",
+              um_revQ_LName: "",
+              um_revQ_FName: "",
+              um_src_LName: "",
+              um_src_FName: "",
+              piv_ref2: i,
+              piv_acctStatus: row[Object.keys(row)[1]],
+              piv_LName: row[Object.keys(row)[2]],
+              piv_FName: row[Object.keys(row)[3]],
+              piv_acctType: row[Object.keys(row)[10]],
+              src_addr1: "",
+              src_addr2: "",
+              src_city: "",
+              src_state: "",
+              src_zip: "",
+              src_name2: ""
+            });
+          });
+
+          const singleMatch = [];
+          const multiMatch = [];
+
+          refMap.forEach((refSet, debtor) => {
+            const target = refSet.size > 1 ? multiMatch : singleMatch;
+            const unmatchRows = unmatchGrouped.get(debtor) || [];
+            const pivotRows = pivotGrouped.get(debtor) || [];
+            target.push(...unmatchRows);
+            target.push(...pivotRows);
+          });
+
+          // ✅ Generate to_import.csv from single-match unmatch rows
+          const seenDebtors = new Set();
+          const toImport = [];
+
+          singleMatch.forEach(row => {
+            if (row.Source === "Unmatch") {
+              const debtor = row.um_debtorNumber;
+              if (!seenDebtors.has(debtor)) {
+                seenDebtors.add(debtor);
+
+                const fullRow = unmatch.find(r =>
+                  r[Object.keys(r)[0]]?.trim() === debtor
+                );
+
+                if (fullRow) {
+                  toImport.push({
+                    um_debtorNumber: debtor,
+                    um_src_LName: fullRow[Object.keys(fullRow)[6]],
+                    um_src_FName: fullRow[Object.keys(fullRow)[7]],
+                    src_name2: fullRow[Object.keys(fullRow)[8]],
+                    src_addr1: fullRow[Object.keys(fullRow)[10]],
+                    src_addr2: fullRow[Object.keys(fullRow)[11]],
+                    src_city: fullRow[Object.keys(fullRow)[12]],
+                    src_state: fullRow[Object.keys(fullRow)[13]],
+                    src_zip: fullRow[Object.keys(fullRow)[14]],
+                    um_ref2:    fullRow[Object.keys(fullRow)[2]]
+                  });
+                }
+              }
+            }
+          });
+
+          // ✅ Filter and export multi_match.csv
+          const unmatchDebtors = new Set();
+          unmatch.forEach(row => {
+            const debtor = row[Object.keys(row)[0]]?.trim();
+            if (debtor) unmatchDebtors.add(debtor);
+          });
+
+          const seenRefCombos = new Set();
+          const filteredMultiMatch = [];
+
+          multiMatch.forEach(row => {
+            const debtor = row.um_debtorNumber;
+            const ref2 = row.um_ref2 || row.piv_ref2;
+            const comboKey = `${debtor}||${ref2}`;
+
+            if (
+              debtor &&
+              ref2 &&
+              unmatchDebtors.has(debtor) &&
+              !seenRefCombos.has(comboKey)
+            ) {
+              seenRefCombos.add(comboKey);
+              filteredMultiMatch.push(row);
+            }
+          });
+
+          // Final exports
+          exportCSV(filteredMultiMatch, "multi_match.csv");
+          exportCSV(toImport, "to_import.csv");
+
+          document.getElementById("status").innerText =
+            `Done! Exported ${filteredMultiMatch.length} multi-match and ${toImport.length} to-import rows.`;
+        }
+      });
+    }
+  });
+}
+
+
+
+
+
+
+    function exportCSV(data, filename) {
+  if (!data.length) return;
+  const headers = Object.keys(data[0]);
+  const rows = [headers.join(",")];
+  data.forEach(row => {
+    const line = headers.map(h => JSON.stringify(row[h] ?? ""));
+    rows.push(line.join(","));
+  });
+  const blob = new Blob([rows.join("\n")], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+
+
+
+  </script>
+</body>
+</html>
