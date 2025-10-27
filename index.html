@@ -25,7 +25,6 @@
     .preview-wrapper { display:none; text-align:left; width:100%; max-width:520px; }
     table { border-collapse: collapse; } th, td { border:1px solid #eee; padding:4px 8px; }
     .hint { font-size:12px; color:#666; text-align:center; margin-top:-6px; }
-    .muted { color:#555; font-size:12px; }
   </style>
 </head>
 <body>
@@ -56,7 +55,7 @@
     </label>
     <button id="goBtn" onclick="processFiles()">Generate Output</button>
   </div>
-  <div class="hint">Outputs: <code>multi_match.csv</code> and <code>to_import.csv</code></div>
+  <div class="hint">Outputs: <code>[prefix]_single_match.csv</code> and <code>[prefix]_multi_match.csv</code></div>
 
   <p id="status"></p>
 
@@ -64,15 +63,13 @@
     // =========================
     // CONFIG — YOU EDIT THESE
     // =========================
-    // NEW: Filenames that should match on REF2 vs REF3.
-    // We check if the Unmatch file name (lowercased) contains any of these substrings.
+    // We detect the Unmatch file's matching key from its filename (lowercased).
+    // If filename contains any of these substrings → use REF2 / REF3 respectively.
     const USE_REF2_KEYS = [
-      // e.g. 'pp_', 'real_estate_', 'something_ref2'
-      'Fairfax County_Rev_trevdat'
+      // e.g. 'pp_', 'real_estate_'
     ];
     const USE_REF3_KEYS = [
-      // e.g. 'business_license_', 'um_', 'something_ref3'
-      'Russell County_Rev', 'Greene County_Rev'
+      // e.g. 'business_license_', 'um_'
     ];
 
     // ---- Column mapping (fallbacks supported) ----
@@ -80,7 +77,7 @@
       UNMATCH: {
         debtorNumber: { headers: ['DebtorNumber','Debtor Number','Debtor','Number','AccountId','FUN'], index: 0 },
         ref2:         { headers: ['Reference2','Reference 2','Ref2','ref2'], index: 2 },
-        ref3:         { headers: ['Reference3','Reference 3','Ref3','ref3'], index: 3 }, // NEW
+        ref3:         { headers: ['Reference3','Reference 3','Ref3','ref3'], index: 3 },
         revqLName:    { headers: ['RevQ_LName','revq_lname','revQ_LName'], index: 4 },
         revqFName:    { headers: ['RevQ_FName','revq_fname','revQ_FName'], index: 5 },
         srcLName:     { headers: ['Source_LName','Src_LName','Source Last Name','src_lname'], index: 6 },
@@ -97,10 +94,10 @@
         acctStatus:   { headers: ['AccountStatus','AcctStatus','Status'], index: 1 },
         pivLName:     { headers: ['LastName','LName','Last Name'], index: 2 },
         pivFName:     { headers: ['FirstName','FName','First Name'], index: 3 },
+        acctRef1:     { headers: ['AccountReference1','Account Reference 1','Reference1','Ref1','ref1'], index: 4 }, // for COST filter
         ref2:         { headers: ['Reference2','Reference 2','Ref2','ref2'], index: 8 },
-        ref3:         { headers: ['Reference3','Reference 3','Ref3','ref3'], index: 9 }, // NEW
-        acctType:     { headers: ['AccountType','AcctType','Type'], index: 10 },
-        acctRef1:     { headers: ['AccountReference1','Account Reference 1','Reference1','Ref1','ref1'], index: 4 } // NEW (for COST filter)
+        ref3:         { headers: ['Reference3','Reference 3','Ref3','ref3'], index: 9 },
+        acctType:     { headers: ['AccountType','AcctType','Type'], index: 10 }
       }
     };
 
@@ -177,11 +174,66 @@
           "Please add a substring to USE_REF2_KEYS or USE_REF3_KEYS that matches this file."
         );
       }
-      // If it hits both, be strict and error to avoid ambiguity.
       throw new Error(
         "Filename matched both REF2 and REF3 key sets. Please adjust USE_REF2_KEYS / USE_REF3_KEYS to avoid ambiguity."
       );
     }
+
+    // Output names: use everything before '_UnMatchName_R.csv' as the prefix
+    function buildOutputNames(unmatchFilename){
+      const needle = '_UnMatchName_R.csv';
+      const idx = unmatchFilename.indexOf(needle);
+      const prefix = idx > 0 ? unmatchFilename.slice(0, idx) : unmatchFilename.replace(/\.csv$/i,'');
+      return {
+        singleName: `${prefix}_single_match.csv`,
+        multiName:  `${prefix}_multi_match.csv`
+      };
+    }
+
+    // CSV export with BOM and preferred header order
+    function exportCSV(data, filename, preferredHeaderOrder){
+      if(!data || !data.length) return;
+      const headerSet = new Set(); data.forEach(r => Object.keys(r).forEach(k => headerSet.add(k)));
+      const headersAll = Array.from(headerSet);
+      const headers = preferredHeaderOrder
+        ? [...preferredHeaderOrder.filter(h => headersAll.includes(h)),
+           ...headersAll.filter(h => !preferredHeaderOrder.includes(h))]
+        : headersAll;
+
+      const rows = [];
+      rows.push(headers.join(","));
+      data.forEach(row => {
+        const line = headers.map(h => JSON.stringify(String(row[h] ?? '')));
+        rows.push(line.join(","));
+      });
+      const blob = new Blob(["\uFEFF" + rows.join("\n")], { type:'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a"); link.href = url; link.download = filename;
+      document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(url);
+    }
+
+    // Preferred header orders
+    const MULTI_HEADERS_FIRST = [
+      'Source',
+      'um_debtorNumber',
+      'match_key',          // ensure early
+      'all_match_values',   // immediately after match_key
+      'other_match_values',
+      'account_type',
+      'um_ref2','um_ref3','piv_ref2','piv_ref3',
+      'piv_acctStatus','piv_LName','piv_FName','piv_acctType',
+      'um_revQ_LName','um_revQ_FName','um_src_LName','um_src_FName',
+      'src_name2','src_addr1','src_addr2','src_city','src_state','src_zip'
+    ];
+
+    const SINGLE_HEADERS_FIRST = [
+      'um_debtorNumber',
+      'match_key',
+      'account_type',
+      'um_ref2','um_ref3',
+      'um_src_LName','um_src_FName','src_name2',
+      'src_addr1','src_addr2','src_city','src_state','src_zip'
+    ];
 
     // ---- Main processing ----
     function processFiles() {
@@ -200,11 +252,10 @@
         setStatus(String(e.message || e));
         return;
       }
-      setStatus(`Using ${matchKey.toUpperCase()} as the matching field (based on Unmatch file name).`);
 
       setStatus(`Using ${matchKey.toUpperCase()} as the matching field (based on Unmatch file name).`);
-
       appendStatus("Parsing UnmatchName CSV…");
+
       Papa.parse(unmatchFile, {
         header: true, skipEmptyLines: true,
         complete: function(unmatchResults) {
@@ -220,27 +271,26 @@
                 const { data: unmatch, meta: unMeta } = unmatchResults;
                 const { data: rawPivot, meta: pivMeta } = pivotResults;
 
-                // Filter pivot by -RE (optional) and COST in AccountReference1  // NEW
+                // Filter pivot: optionally AccountType ends with -RE, and ALWAYS drop AccountReference1 containing COST
                 const pivot = rawPivot.filter(row => {
-                  // filter by -RE if checkbox is on
                   if (filterRE) {
                     const acctType = getVal(row, pivMeta.fields, MAP.PIVOT.acctType);
                     if (!acctType?.toUpperCase().endsWith('-RE')) return false;
                   }
-                  // drop if AccountReference1 contains "COST"
                   const acctRef1 = getVal(row, pivMeta.fields, MAP.PIVOT.acctRef1);
                   if (acctRef1 && acctRef1.toUpperCase().includes('COST')) return false;
                   return true;
                 });
 
-                const refMap = new Map();         // debtor -> Set of matchKey values (ref2 or ref3)
-                const unmatchGrouped = new Map(); // debtor -> norm rows
-                const pivotGrouped   = new Map(); // debtor -> norm rows
+                // Maps/Groups
+                const refMap = new Map();         // debtor -> Set of match values (ref2/ref3)
+                const unmatchGrouped = new Map(); // debtor -> rows (normalized)
+                const pivotGrouped   = new Map(); // debtor -> rows (normalized)
 
                 // Load from Unmatch
                 unmatch.forEach(row => {
                   const debtor = getVal(row, unMeta.fields, MAP.UNMATCH.debtorNumber);
-                  const matchVal = getVal(row, unMeta.fields, MAP.UNMATCH[matchKey]); // ref2 or ref3
+                  const matchVal = getVal(row, unMeta.fields, MAP.UNMATCH[matchKey]); // chosen ref
                   if (!debtor || !matchVal) return;
 
                   if (!refMap.has(debtor)) refMap.set(debtor, new Set());
@@ -250,16 +300,16 @@
                   unmatchGrouped.get(debtor).push({
                     Source: "Unmatch",
                     um_debtorNumber: debtor,
-                    um_ref2: getVal(row, unMeta.fields, MAP.UNMATCH.ref2), // keep both for visibility
+                    um_ref2: getVal(row, unMeta.fields, MAP.UNMATCH.ref2),
                     um_ref3: getVal(row, unMeta.fields, MAP.UNMATCH.ref3),
-                    um_match_key: matchKey,  // NEW
+                    match_key: matchKey.toUpperCase(),
                     um_revQ_LName: getVal(row, unMeta.fields, MAP.UNMATCH.revqLName),
                     um_revQ_FName: getVal(row, unMeta.fields, MAP.UNMATCH.revqFName),
                     um_src_LName:  getVal(row, unMeta.fields, MAP.UNMATCH.srcLName),
                     um_src_FName:  getVal(row, unMeta.fields, MAP.UNMATCH.srcFName),
                     src_name2:     getVal(row, unMeta.fields, MAP.UNMATCH.srcName2),
                     piv_ref2: "",
-                    piv_ref3: "",  // NEW
+                    piv_ref3: "",
                     piv_acctStatus: "",
                     piv_LName: "",
                     piv_FName: "",
@@ -275,7 +325,7 @@
                 // Load from Pivot
                 pivot.forEach(row => {
                   const debtor   = getVal(row, pivMeta.fields, MAP.PIVOT.debtorNumber);
-                  const matchVal = getVal(row, pivMeta.fields, MAP.PIVOT[matchKey]); // ref2 or ref3
+                  const matchVal = getVal(row, pivMeta.fields, MAP.PIVOT[matchKey]);
                   if (!debtor || !matchVal) return;
 
                   if (!refMap.has(debtor)) refMap.set(debtor, new Set());
@@ -287,7 +337,7 @@
                     um_debtorNumber: debtor,
                     um_ref2: "",
                     um_ref3: "",
-                    um_match_key: matchKey, // NEW
+                    match_key: matchKey.toUpperCase(),
                     piv_ref2: getVal(row, pivMeta.fields, MAP.PIVOT.ref2),
                     piv_ref3: getVal(row, pivMeta.fields, MAP.PIVOT.ref3),
                     piv_acctStatus: getVal(row, pivMeta.fields, MAP.PIVOT.acctStatus),
@@ -303,7 +353,18 @@
                   });
                 });
 
-                // Partition single vs multi by #unique match values per debtor
+                // Build a lookup: debtor -> (matchVal -> account_type) from Pivot rows
+                const pivotAcctTypeIndex = new Map(); // Map<string, Map<string, string>>
+                pivot.forEach(row => {
+                  const debtor   = getVal(row, pivMeta.fields, MAP.PIVOT.debtorNumber);
+                  const matchVal = getVal(row, pivMeta.fields, MAP.PIVOT[matchKey]);
+                  const acctType = getVal(row, pivMeta.fields, MAP.PIVOT.acctType);
+                  if (!debtor || !matchVal) return;
+                  if (!pivotAcctTypeIndex.has(debtor)) pivotAcctTypeIndex.set(debtor, new Map());
+                  pivotAcctTypeIndex.get(debtor).set(matchVal, acctType || '');
+                });
+
+                // Partition into single vs multi
                 const singleMatch = [];
                 const multiMatch  = [];
                 refMap.forEach((refSet, debtor) => {
@@ -313,7 +374,7 @@
                   target.push(...um, ...pv);
                 });
 
-                // Build to_import from single-match UNMATCH rows (1 per debtor)
+                // Build single_match rows from Unmatch only (1 per debtor)
                 const seenDebtors = new Set();
                 const toImport = [];
                 const unmatchByDebtor = new Map();
@@ -332,23 +393,28 @@
                     if (fullRow) {
                       toImport.push({
                         um_debtorNumber: debtor,
-                        um_src_LName: getVal(fullRow, unMeta.fields, MAP.UNMATCH.srcLName),
-                        um_src_FName: getVal(fullRow, unMeta.fields, MAP.UNMATCH.srcFName),
-                        src_name2:     getVal(fullRow, unMeta.fields, MAP.UNMATCH.srcName2),
-                        src_addr1:     getVal(fullRow, unMeta.fields, MAP.UNMATCH.srcAddr1),
-                        src_addr2:     getVal(fullRow, unMeta.fields, MAP.UNMATCH.srcAddr2),
-                        src_city:      getVal(fullRow, unMeta.fields, MAP.UNMATCH.srcCity),
-                        src_state:     getVal(fullRow, unMeta.fields, MAP.UNMATCH.srcState),
-                        src_zip:       getVal(fullRow, unMeta.fields, MAP.UNMATCH.srcZip),
-                        um_ref2:       getVal(fullRow, unMeta.fields, MAP.UNMATCH.ref2),
-                        um_ref3:       getVal(fullRow, unMeta.fields, MAP.UNMATCH.ref3),
-                        um_match_key:  matchKey // NEW
+                        match_key:       matchKey.toUpperCase(),
+                        account_type:    (() => {
+                          const mval = getVal(fullRow, unMeta.fields, MAP.UNMATCH[matchKey]);
+                          const byDebtor = pivotAcctTypeIndex.get(debtor);
+                          return (byDebtor && mval) ? (byDebtor.get(mval) || '') : '';
+                        })(),
+                        um_ref2:         getVal(fullRow, unMeta.fields, MAP.UNMATCH.ref2),
+                        um_ref3:         getVal(fullRow, unMeta.fields, MAP.UNMATCH.ref3),
+                        um_src_LName:    getVal(fullRow, unMeta.fields, MAP.UNMATCH.srcLName),
+                        um_src_FName:    getVal(fullRow, unMeta.fields, MAP.UNMATCH.srcFName),
+                        src_name2:       getVal(fullRow, unMeta.fields, MAP.UNMATCH.srcName2),
+                        src_addr1:       getVal(fullRow, unMeta.fields, MAP.UNMATCH.srcAddr1),
+                        src_addr2:       getVal(fullRow, unMeta.fields, MAP.UNMATCH.srcAddr2),
+                        src_city:        getVal(fullRow, unMeta.fields, MAP.UNMATCH.srcCity),
+                        src_state:       getVal(fullRow, unMeta.fields, MAP.UNMATCH.srcState),
+                        src_zip:         getVal(fullRow, unMeta.fields, MAP.UNMATCH.srcZip)
                       });
                     }
                   }
                 });
 
-                // Filter multiMatch to only debtor/(matchKey) combos that exist in UNMATCH (dedup combos)
+                // Filter multiMatch to only debtor/(matchKey) combos that exist in UNMATCH, dedupe, and enrich
                 const unmatchCombos = new Set();
                 unmatch.forEach(r => {
                   const d = getVal(r, unMeta.fields, MAP.UNMATCH.debtorNumber);
@@ -364,26 +430,31 @@
                     ? (row.um_ref2 || row.piv_ref2)
                     : (row.um_ref3 || row.piv_ref3);
                   if (!debtor || !refVal) return;
-                
+
                   const key = `${debtor}||${refVal}`;
-                  if (!unmatchCombos.has(key)) return;      // keep only combos present in Unmatch
+                  if (!unmatchCombos.has(key)) return;   // keep only combos present in Unmatch
                   if (seenCombos.has(key)) return;
                   seenCombos.add(key);
-                
-                  // NEW: surface all/other match values for this debtor (from both files)
+
+                  // All/other match values for context
                   const allVals = Array.from(refMap.get(debtor) || []);
                   const others  = allVals.filter(v => v && v !== refVal);
-                
-                  // attach new context columns (names are key-agnostic so they work for ref2 or ref3)
-                  row.all_match_values   = allVals.join('|');   // e.g., "ABC|DEF|GHI"
-                  row.other_match_values = others.join('|');    // e.g., "DEF|GHI"
-                  row.match_key_used     = matchKey.toUpperCase(); // "REF2" or "REF3" for clarity
-                
+
+                  // account_type from Pivot for this debtor/matchVal
+                  let accountType = '';
+                  const byDebtor = pivotAcctTypeIndex.get(debtor);
+                  if (byDebtor) accountType = byDebtor.get(refVal) || '';
+
+                  // attach / overwrite fields
+                  row.match_key          = matchKey.toUpperCase();
+                  row.all_match_values   = allVals.join('|');  // <-- placed after match_key via header order
+                  row.other_match_values = others.join('|');
+                  row.account_type       = accountType;
+
                   filteredMultiMatch.push(row);
                 });
 
-
-                // Sort for readability
+                // Sort outputs (optional; readability)
                 toImport.sort((a,b) => (a.um_debtorNumber||'').localeCompare(b.um_debtorNumber||''));
                 filteredMultiMatch.sort((a,b) => {
                   const da = (a.um_debtorNumber||''); const db = (b.um_debtorNumber||'');
@@ -397,12 +468,15 @@
                   return ra.localeCompare(rb);
                 });
 
-                exportCSV(filteredMultiMatch, "multi_match.csv");
-                exportCSV(toImport, "to_import.csv");
+                // Export with names based on unmatch prefix
+                const { singleName, multiName } = buildOutputNames(unmatchFile.name);
+                exportCSV(filteredMultiMatch, multiName,  MULTI_HEADERS_FIRST);
+                exportCSV(toImport,          singleName, SINGLE_HEADERS_FIRST);
 
                 setStatus(
                   `Done! Using ${matchKey.toUpperCase()} as match field.\n` +
-                  `Exported ${filteredMultiMatch.length} multi-match and ${toImport.length} to-import rows.`
+                  `Exported ${filteredMultiMatch.length} multi-match and ${toImport.length} single-match rows.\n` +
+                  `Files: ${singleName}, ${multiName}`
                 );
               } catch (err) {
                 console.error(err);
@@ -412,23 +486,6 @@
           });
         }
       });
-    }
-
-    // CSV export with BOM
-    function exportCSV(data, filename){
-      if(!data || !data.length) return;
-      const headerSet = new Set(); data.forEach(r => Object.keys(r).forEach(k => headerSet.add(k)));
-      const headers = Array.from(headerSet);
-      const rows = [];
-      rows.push(headers.join(","));
-      data.forEach(row => {
-        const line = headers.map(h => JSON.stringify(String(row[h] ?? '')));
-        rows.push(line.join(","));
-      });
-      const blob = new Blob(["\uFEFF" + rows.join("\n")], { type:'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a"); link.href = url; link.download = filename;
-      document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(url);
     }
   </script>
 </body>
