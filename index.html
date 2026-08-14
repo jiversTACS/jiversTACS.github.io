@@ -99,7 +99,10 @@
         acctRef1:     { headers: ['AccountReference1','Account Reference 1','Reference1','Ref1','ref1'], index: 4 }, // for COST filter
         ref2:         { headers: ['Reference2','Reference 2','Ref2','ref2'], index: 8 },
         ref3:         { headers: ['Reference3','Reference 3','Ref3','ref3'], index: 9 },
-        acctType:     { headers: ['AccountType','AcctType','Type'], index: 10 }
+        acctType:     { headers: ['AccountType','AcctType','Type'], index: 10 },
+        tax:          { headers: ['Tax','TaxAmount','Tax Amt','TaxAmt'], index: 11 },
+        penalty:      { headers: ['Penalty','PenaltyAmount','Penalty Amt','PenaltyAmt'], index: 12 },
+        interest:     { headers: ['Interest','InterestAmount','Interest Amt','InterestAmt'], index: 13 }
       }
     };
 
@@ -234,6 +237,7 @@
       'account_type',
       'map_has_multiple_debtors',
       'other_debtors',
+      'other_debtor_has_balance',
       'um_ref2','um_ref3',
       'um_src_LName','um_src_FName','src_name2',
       'src_addr1','src_addr2','src_city','src_state','src_zip'
@@ -382,6 +386,21 @@
                   pivotValueToDebtors.get(matchVal).add(debtor);
                 });
 
+                // Same universe (whole raw Pivot file), but keeping the Tax/Penalty/Interest
+                // amounts per row so we can check whether an "other debtor" sharing a ref
+                // value actually carries a balance on the row(s) tied to that ref value.
+                const pivotRowsByValue = new Map(); // Map<matchValue, Array<{debtor, tax, penalty, interest}>>
+                rawPivot.forEach(row => {
+                  const debtor   = getVal(row, pivMeta.fields, MAP.PIVOT.debtorNumber);
+                  const matchVal = getVal(row, pivMeta.fields, MAP.PIVOT[matchKey]);
+                  if (!debtor || !matchVal) return;
+                  const tax      = parseFloat(getVal(row, pivMeta.fields, MAP.PIVOT.tax))      || 0;
+                  const penalty  = parseFloat(getVal(row, pivMeta.fields, MAP.PIVOT.penalty))  || 0;
+                  const interest = parseFloat(getVal(row, pivMeta.fields, MAP.PIVOT.interest)) || 0;
+                  if (!pivotRowsByValue.has(matchVal)) pivotRowsByValue.set(matchVal, []);
+                  pivotRowsByValue.get(matchVal).push({ debtor, tax, penalty, interest });
+                });
+
                 // Partition into single vs multi
                 const singleMatch = [];
                 const multiMatch  = [];
@@ -413,6 +432,14 @@
                       const debtorsForVal = pivotValueToDebtors.get(mval) || new Set();
                       const otherDebtors = Array.from(debtorsForVal).filter(d => d !== debtor);
 
+                      // Does any OTHER debtor's Pivot row(s) for this SAME ref value carry
+                      // a Tax, Penalty, or Interest balance > 0?
+                      const rowsForVal = pivotRowsByValue.get(mval) || [];
+                      const otherDebtorSet = new Set(otherDebtors);
+                      const otherDebtorHasBalance = rowsForVal.some(r =>
+                        otherDebtorSet.has(r.debtor) && (r.tax > 0 || r.penalty > 0 || r.interest > 0)
+                      );
+
                       toImport.push({
                         um_debtorNumber: debtor,
                         match_key:       matchKey.toUpperCase(),
@@ -422,6 +449,7 @@
                         })(),
                         map_has_multiple_debtors: otherDebtors.length > 0 ? 'TRUE' : 'FALSE',
                         other_debtors:   otherDebtors.join('|'),
+                        other_debtor_has_balance: otherDebtorHasBalance ? 'TRUE' : 'FALSE',
                         um_ref2:         getVal(fullRow, unMeta.fields, MAP.UNMATCH.ref2),
                         um_ref3:         getVal(fullRow, unMeta.fields, MAP.UNMATCH.ref3),
                         um_src_LName:    getVal(fullRow, unMeta.fields, MAP.UNMATCH.srcLName),
