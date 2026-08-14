@@ -232,6 +232,8 @@
       'um_debtorNumber',
       'match_key',
       'account_type',
+      'map_has_multiple_debtors',
+      'other_debtors',
       'um_ref2','um_ref3',
       'um_src_LName','um_src_FName','src_name2',
       'src_addr1','src_addr2','src_city','src_state','src_zip'
@@ -366,6 +368,20 @@
                   pivotAcctTypeIndex.get(debtor).set(matchVal, acctType || '');
                 });
 
+                // Reverse index: match value -> Set of debtors that have it, built from the
+                // WHOLE raw Pivot file (unfiltered by the -RE / COST rules above, and not
+                // limited to debtors that ended up in the single/multi outputs). Used to flag
+                // single-match debtors whose one ref value is actually shared with a
+                // different debtor number anywhere in Pivot.
+                const pivotValueToDebtors = new Map(); // Map<matchValue, Set<debtor>>
+                rawPivot.forEach(row => {
+                  const debtor   = getVal(row, pivMeta.fields, MAP.PIVOT.debtorNumber);
+                  const matchVal = getVal(row, pivMeta.fields, MAP.PIVOT[matchKey]);
+                  if (!debtor || !matchVal) return;
+                  if (!pivotValueToDebtors.has(matchVal)) pivotValueToDebtors.set(matchVal, new Set());
+                  pivotValueToDebtors.get(matchVal).add(debtor);
+                });
+
                 // Partition into single vs multi
                 const singleMatch = [];
                 const multiMatch  = [];
@@ -393,14 +409,19 @@
 
                     const fullRow = unmatchByDebtor.get(debtor);
                     if (fullRow) {
+                      const mval = getVal(fullRow, unMeta.fields, MAP.UNMATCH[matchKey]);
+                      const debtorsForVal = pivotValueToDebtors.get(mval) || new Set();
+                      const otherDebtors = Array.from(debtorsForVal).filter(d => d !== debtor);
+
                       toImport.push({
                         um_debtorNumber: debtor,
                         match_key:       matchKey.toUpperCase(),
                         account_type:    (() => {
-                          const mval = getVal(fullRow, unMeta.fields, MAP.UNMATCH[matchKey]);
                           const byDebtor = pivotAcctTypeIndex.get(debtor);
                           return (byDebtor && mval) ? (byDebtor.get(mval) || '') : '';
                         })(),
+                        map_has_multiple_debtors: otherDebtors.length > 0 ? 'TRUE' : 'FALSE',
+                        other_debtors:   otherDebtors.join('|'),
                         um_ref2:         getVal(fullRow, unMeta.fields, MAP.UNMATCH.ref2),
                         um_ref3:         getVal(fullRow, unMeta.fields, MAP.UNMATCH.ref3),
                         um_src_LName:    getVal(fullRow, unMeta.fields, MAP.UNMATCH.srcLName),
@@ -475,9 +496,12 @@
                 exportCSV(filteredMultiMatch, multiName,  MULTI_HEADERS_FIRST);
                 exportCSV(toImport,          singleName, SINGLE_HEADERS_FIRST);
 
+                const sharedCount = toImport.filter(r => r.map_has_multiple_debtors === 'TRUE').length;
+
                 setStatus(
                   `Done! Using ${matchKey.toUpperCase()} as match field.\n` +
                   `Exported ${filteredMultiMatch.length} multi-match and ${toImport.length} single-match rows.\n` +
+                  `${sharedCount} single-match row(s) had a ref value shared with another debtor.\n` +
                   `Files: ${singleName}, ${multiName}`
                 );
               } catch (err) {
